@@ -6,7 +6,7 @@ import { Logomark } from '../components/Logomark'
 /** 模拟桌面：1440 × 900，用于展示真实的窗口层级关系 */
 export function DesktopScene() {
   return (
-    <div className="desktop-wallpaper relative h-[900px] w-[1440px] overflow-hidden">
+    <div className="desktop-wallpaper relative h-[900px] w-[1440px] overflow-clip">
       {/* 环境光 */}
       <div className="pointer-events-none absolute top-[-120px] right-[-80px] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,rgba(44,175,159,0.22),transparent_65%)] blur-2xl" />
       <div className="pointer-events-none absolute bottom-[-160px] left-[-60px] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle,rgba(111,168,214,0.16),transparent_65%)] blur-2xl" />

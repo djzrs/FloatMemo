@@ -20,11 +20,12 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
-import { formatRelative } from '../lib/time'
+import { formatDateTime, formatRelative } from '../lib/time'
 import { useNotesStore } from '../stores/notes'
 import { Logomark } from './Logomark'
 import { NoteCard } from './NoteCard'
 import { NoteEditor } from './NoteEditor'
+import { NoteMenu } from './NoteMenu'
 import { SettingsView } from './SettingsView'
 import { TrashView } from './TrashView'
 
@@ -45,6 +46,73 @@ function tagDot(name: string): string {
   let hash = 0
   for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) % 9973
   return TAG_DOTS[hash % TAG_DOTS.length]
+}
+
+/** 列表视图的一行 */
+function NoteRow({
+  note,
+  onOpen,
+  onTogglePin,
+  onArchive,
+}: {
+  note: Note
+  onOpen: () => void
+  onTogglePin: () => void
+  onArchive: () => void
+}) {
+  const c = NOTE_COLORS[note.color]
+  return (
+    <div
+      onClick={onOpen}
+      className="group flex cursor-pointer items-center gap-3 border-b border-ink-100/70 px-3.5 py-[11px] transition-colors last:border-0 hover:bg-ink-50/70"
+    >
+      <span className="h-[22px] w-[3px] shrink-0 rounded-full" style={{ background: c.dot }} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[12.5px] font-medium" style={{ color: c.ink }}>
+          {note.title}
+        </div>
+        <div className="mt-[2px] truncate text-[11px] text-ink-400">
+          {note.content.trim() || '（空便签）'}
+        </div>
+      </div>
+      <div className="hidden w-[112px] shrink-0 flex-wrap items-center gap-1 lg:flex">
+        {note.tags.slice(0, 2).map((t) => (
+          <span
+            key={t}
+            className="rounded-full bg-ink-50 px-1.5 py-[1px] text-[9.5px] text-ink-500"
+          >
+            #{t}
+          </span>
+        ))}
+      </div>
+      <time
+        className="w-[64px] shrink-0 text-right text-[10.5px] text-ink-300"
+        title={formatDateTime(note.updatedAt)}
+      >
+        {formatRelative(note.updatedAt)}
+      </time>
+      <button
+        type="button"
+        title={note.pinned ? '取消置顶' : '置顶'}
+        onClick={(e) => {
+          e.stopPropagation()
+          onTogglePin()
+        }}
+        className={`grid h-[20px] w-[20px] shrink-0 place-items-center rounded-full transition-opacity ${
+          note.pinned ? 'text-brand-600 opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+      >
+        <Pin size={11} strokeWidth={2.2} fill={note.pinned ? 'currentColor' : 'none'} />
+      </button>
+      <NoteMenu
+        pinned={note.pinned}
+        onEdit={onOpen}
+        onTogglePin={onTogglePin}
+        onArchive={onArchive}
+        triggerClassName="h-[22px] w-[22px] text-ink-400"
+      />
+    </div>
+  )
 }
 
 function NavItem({
@@ -93,6 +161,9 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('updated')
   const [sortOpen, setSortOpen] = useState(false)
+  const [view, setView] = useState<'grid' | 'list'>(() =>
+    localStorage.getItem('floatmemo.view') === 'list' ? 'list' : 'grid',
+  )
   const [editing, setEditing] = useState<{ note: Note | null } | null>(null)
   const [lastColor, setLastColor] = useState<NoteColorKey>('yellow')
   const [toast, setToast] = useState<string | null>(null)
@@ -218,18 +289,11 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
             onClick={() => changeNav('trash')}
           />
 
-          <div className="mt-3 flex items-center justify-between px-2.5 pt-1 pb-1.5">
+          <div className="mt-3 flex items-center px-2.5 pt-1 pb-1.5">
             <span className="flex items-center gap-1.5 text-[9px] font-medium tracking-[0.18em] text-white/25">
               <Tags size={9.5} strokeWidth={2} />
               标签
             </span>
-            <button
-              type="button"
-              className="text-[13px] leading-none text-white/30 hover:text-white/60"
-              aria-label="新建标签"
-            >
-              +
-            </button>
           </div>
           {tagItems.map((t) => (
             <button
@@ -322,15 +386,33 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
             <div className="flex items-center gap-0.5 rounded-[9px] bg-ink-100/80 p-0.5">
               <button
                 type="button"
-                className="grid h-[26px] w-[26px] place-items-center rounded-[7px] bg-white text-ink-700 shadow-[0_1px_2px_rgba(15,45,45,0.1)]"
+                onClick={() => {
+                  setView('grid')
+                  localStorage.setItem('floatmemo.view', 'grid')
+                }}
+                className={`grid h-[26px] w-[26px] place-items-center rounded-[7px] transition-colors ${
+                  view === 'grid'
+                    ? 'bg-white text-ink-700 shadow-[0_1px_2px_rgba(15,45,45,0.1)]'
+                    : 'text-ink-400 hover:text-ink-600'
+                }`}
                 aria-label="网格视图"
+                aria-pressed={view === 'grid'}
               >
                 <LayoutGrid size={13} strokeWidth={2} />
               </button>
               <button
                 type="button"
-                className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-ink-400 hover:text-ink-600"
+                onClick={() => {
+                  setView('list')
+                  localStorage.setItem('floatmemo.view', 'list')
+                }}
+                className={`grid h-[26px] w-[26px] place-items-center rounded-[7px] transition-colors ${
+                  view === 'list'
+                    ? 'bg-white text-ink-700 shadow-[0_1px_2px_rgba(15,45,45,0.1)]'
+                    : 'text-ink-400 hover:text-ink-600'
+                }`}
                 aria-label="列表视图"
+                aria-pressed={view === 'list'}
               >
                 <List size={13} strokeWidth={2} />
               </button>
@@ -473,20 +555,37 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
               </div>
 
               {list.length > 0 ? (
-                <div className="mt-3.5 grid grid-cols-3 items-stretch gap-3">
-                  {list.map((note) => (
-                    <NoteCard
-                      key={note.id}
-                      note={note}
-                      onOpen={() => setEditing({ note })}
-                      onTogglePin={() => togglePin(note.id)}
-                      onArchive={() => {
-                        archiveNote(note.id)
-                        showToast('已移到回收站')
-                      }}
-                    />
-                  ))}
-                </div>
+                view === 'grid' ? (
+                  <div className="mt-3.5 grid grid-cols-3 items-stretch gap-3">
+                    {list.map((note) => (
+                      <NoteCard
+                        key={note.id}
+                        note={note}
+                        onOpen={() => setEditing({ note })}
+                        onTogglePin={() => togglePin(note.id)}
+                        onArchive={() => {
+                          archiveNote(note.id)
+                          showToast('已移到回收站')
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3.5 overflow-hidden rounded-[12px] border border-line bg-white shadow-[0_1px_2px_rgba(15,45,45,0.04)]">
+                    {list.map((note) => (
+                      <NoteRow
+                        key={note.id}
+                        note={note}
+                        onOpen={() => setEditing({ note })}
+                        onTogglePin={() => togglePin(note.id)}
+                        onArchive={() => {
+                          archiveNote(note.id)
+                          showToast('已移到回收站')
+                        }}
+                      />
+                    ))}
+                  </div>
+                )
               ) : (
                 <div className="mt-10 flex flex-col items-center justify-center pb-10">
                   <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-white ring-1 ring-ink-100">
@@ -525,7 +624,7 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
                   <span>已显示全部 {list.length} 条</span>
                   <span className="flex items-center gap-1.5">
                     <MoreHorizontal size={12} />
-                    点击卡片可编辑
+                    点击可编辑
                   </span>
                 </div>
               )}

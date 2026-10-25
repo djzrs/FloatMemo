@@ -7,12 +7,14 @@ type MenuItemProps = {
   hint?: string
   active?: boolean
   danger?: boolean
+  onClick?: () => void
 }
 
-function MenuItem({ icon: Icon, label, hint, active, danger }: MenuItemProps) {
+function MenuItem({ icon: Icon, label, hint, active, danger, onClick }: MenuItemProps) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className={`group flex h-8 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left transition-colors ${
         active
           ? 'bg-brand-50 text-brand-800'
@@ -36,9 +38,28 @@ function Divider() {
   return <div className="mx-2 my-1 h-px bg-ink-100" />
 }
 
+type Props = {
+  level?: 0 | 1 | 2
+  onLevelChange?: (level: 0 | 1 | 2) => void
+  onNewNote?: () => void
+  onOpenPanel?: () => void
+  onSettings?: () => void
+  onQuit?: () => void
+  className?: string
+}
+
 /** 悬浮球右键菜单 */
-export function BallMenu({ level = 1 }: { level?: 0 | 1 | 2 }) {
-  const [current, setCurrent] = useState<0 | 1 | 2>(level)
+export function BallMenu({
+  level,
+  onLevelChange,
+  onNewNote,
+  onOpenPanel,
+  onSettings,
+  onQuit,
+  className = '',
+}: Props) {
+  const [innerLevel, setInnerLevel] = useState<0 | 1 | 2>(level ?? 1)
+  const current = level ?? innerLevel
   const levels: { v: 0 | 1 | 2; label: string }[] = [
     { v: 0, label: '100%' },
     { v: 1, label: '85%' },
@@ -47,14 +68,14 @@ export function BallMenu({ level = 1 }: { level?: 0 | 1 | 2 }) {
 
   return (
     <div
-      className="w-[228px] rounded-[14px] border border-white/80 bg-white/95 p-1.5 backdrop-blur-xl"
+      className={`w-[228px] rounded-[14px] border border-white/80 bg-white/95 p-1.5 backdrop-blur-xl ${className}`}
       style={{
         boxShadow:
           '0 24px 48px -18px rgba(6,29,29,0.55), 0 4px 12px -4px rgba(6,29,29,0.18), 0 0 0 1px rgba(6,29,29,0.03)',
       }}
     >
-      <MenuItem icon={NotebookPen} label="新建便签" hint="Ctrl ⇧ N" active />
-      <MenuItem icon={PanelLeft} label="打开便签面板" hint="Ctrl ⇧ M" />
+      <MenuItem icon={NotebookPen} label="新建便签" hint="Ctrl ⇧ N" active onClick={onNewNote} />
+      <MenuItem icon={PanelLeft} label="打开便签面板" hint="Ctrl ⇧ M" onClick={onOpenPanel} />
 
       <Divider />
 
@@ -70,7 +91,10 @@ export function BallMenu({ level = 1 }: { level?: 0 | 1 | 2 }) {
             <button
               key={l.v}
               type="button"
-              onClick={() => setCurrent(l.v)}
+              onClick={() => {
+                setInnerLevel(l.v)
+                onLevelChange?.(l.v)
+              }}
               className={`h-[22px] flex-1 rounded-md border text-[10.5px] transition-all ${
                 current === l.v
                   ? 'border-brand-400/60 bg-brand-100 text-brand-800'
@@ -94,8 +118,8 @@ export function BallMenu({ level = 1 }: { level?: 0 | 1 | 2 }) {
 
       <Divider />
 
-      <MenuItem icon={Settings2} label="设置" />
-      <MenuItem icon={Power} label="退出浮笺" danger />
+      <MenuItem icon={Settings2} label="设置" onClick={onSettings} />
+      <MenuItem icon={Power} label="退出浮笺" danger onClick={onQuit} />
     </div>
   )
 }
