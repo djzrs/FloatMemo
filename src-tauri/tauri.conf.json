@@ -30,27 +30,6 @@
         "focus": false,
         "minWidth": 1,
         "minHeight": 1
-      },
-      {
-        "label": "quick",
-        "title": "速记",
-        "url": "index.html",
-        "width": 520,
-        "height": 180,
-        "resizable": false,
-        "maximizable": false,
-        "minimizable": false,
-        "closable": false,
-        "transparent": true,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "shadow": false,
-        "visible": false,
-        "focus": false,
-        "center": true,
-        "minWidth": 1,
-        "minHeight": 1
       }
     ],
     "security": {
