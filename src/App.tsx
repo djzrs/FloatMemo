@@ -6,7 +6,7 @@ import { QuickNote } from './components/QuickNote'
 import { hideWindow, isDesktop } from './lib/desktop'
 import { DesktopDemo } from './showcase/DesktopDemo'
 import { Showcase } from './showcase/Showcase'
-import { useNotesStore } from './stores/notes'
+import { flushNotes, initNotes, useNotesStore } from './stores/notes'
 import { useSettingsStore } from './stores/settings'
 
 const params = new URLSearchParams(window.location.search)
@@ -27,6 +27,17 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.motion = animations ? 'on' : 'off'
   }, [animations])
+
+  // 桌面端：从 SQLite 载入便签，并在离开前把改动刷进库
+  useEffect(() => {
+    void initNotes()
+    const leave = () => void flushNotes()
+    window.addEventListener('beforeunload', leave)
+    return () => {
+      window.removeEventListener('beforeunload', leave)
+      void flushNotes()
+    }
+  }, [])
 
   if (demo === 'desktop') return <DesktopDemo />
 

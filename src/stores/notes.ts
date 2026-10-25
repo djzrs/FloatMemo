@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { NoteColorKey } from '../data/colors'
 import { createSeedNotes, type Note } from '../data/notes'
+import { isDesktop } from '../lib/desktop'
+import { loadNotes, saveNotes } from '../lib/db'
 
 export type NoteDraft = {
   title: string
@@ -156,3 +158,44 @@ export const useNotesStore = create<NotesState>()(
 
 /** 注意：过滤请直接在组件里基于 notes 计算，不要写成返回新数组的 selector */
 export const notesStorageKey = 'floatmemo.notes'
+
+/* ---------- 桌面端 SQLite 落盘 ---------- */
+
+let syncTimer: ReturnType<typeof setTimeout> | undefined
+let syncing: Promise<void> | null = null
+
+/** 改动后防抖写库（500ms），避免连续输入时刷太多 SQL */
+function scheduleSync(notes: Note[]) {
+  if (!isDesktop) return
+  clearTimeout(syncTimer)
+  syncTimer = setTimeout(() => {
+    syncing = saveNotes(notes).catch(() => undefined)
+  }, 500)
+}
+
+/** 立即把当前便签写库（退出前 / 切页面时调用） */
+export function flushNotes(): Promise<void> {
+  if (!isDesktop) return Promise.resolve()
+  clearTimeout(syncTimer)
+  syncing = saveNotes(useNotesStore.getState().notes).catch(() => undefined)
+  return syncing
+}
+
+/**
+ * 启动同步：
+ * - 库里有数据 → 以库为准（localStorage 只是浏览器预览的兜底）
+ * - 库是空的 → 把当前（示例或 localStorage 里的）便签写进库，完成首次落盘
+ */
+export async function initNotes(): Promise<void> {
+  if (!isDesktop) return
+  const rows = await loadNotes().catch(() => null)
+  if (rows === null) return
+  if (rows.length) {
+    useNotesStore.setState({ notes: rows })
+  } else {
+    await saveNotes(useNotesStore.getState().notes).catch(() => undefined)
+  }
+  useNotesStore.subscribe((state, prev) => {
+    if (state.notes !== prev.notes) scheduleSync(state.notes)
+  })
+}
