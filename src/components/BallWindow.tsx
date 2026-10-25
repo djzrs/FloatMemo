@@ -1,5 +1,4 @@
 import { listen } from '@tauri-apps/api/event'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PanelPage } from './Panel'
 import { useSettingsStore } from '../stores/settings'
@@ -9,6 +8,7 @@ import {
   hideWindow,
   isDesktop,
   openPanelInBrowser,
+  moveBallBy,
   openPanelPage,
   quitApp,
   setBallHidden,
@@ -72,33 +72,45 @@ export function BallWindow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, armIdle])
 
-  /** 按住拖动：超过阈值才交给系统拖窗，松手后吸附到最近的边 */
+  /**
+   * 按住拖动：自己按鼠标位移移动窗口（不依赖系统原生拖窗，后者在本机不生效），
+   * 超过阈值才算拖动以免吃掉单击，松手后吸附到最近的边。
+   */
   const beginDrag = useCallback(
     (down: React.MouseEvent) => {
       if (!isDesktop || down.button !== 0) return
-      const startX = down.clientX
-      const startY = down.clientY
-      let started = false
+      down.preventDefault()
+      const startX = down.screenX
+      const startY = down.screenY
+      let lastX = startX
+      let lastY = startY
+      let moved = false
 
       const stop = () => {
         window.removeEventListener('mousemove', onMove)
         window.removeEventListener('mouseup', stop)
       }
       const onMove = (e: MouseEvent) => {
-        if (started) return
-        if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) < 5) return
-        started = true
-        suppressClick.current = true
-        stop()
-        void (async () => {
-          await getCurrentWindow().startDragging()
-          await snapBall().catch(() => undefined)
-          untuck()
-        })()
+        if (!moved) {
+          if (Math.abs(e.screenX - startX) + Math.abs(e.screenY - startY) < 5) return
+          moved = true
+          suppressClick.current = true
+        }
+        const dx = e.screenX - lastX
+        const dy = e.screenY - lastY
+        lastX = e.screenX
+        lastY = e.screenY
+        if (dx === 0 && dy === 0) return
+        void moveBallBy(dx, dy).catch(() => undefined)
       }
 
       window.addEventListener('mousemove', onMove)
-      window.addEventListener('mouseup', stop)
+      window.addEventListener('mouseup', () => {
+        stop()
+        if (!moved) return
+        void snapBall().catch(() => undefined)
+        untuck()
+      })
     },
     [untuck],
   )
@@ -230,7 +242,7 @@ export function BallWindow() {
 
   return (
     <div
-      className="flex h-full w-full items-center justify-start"
+      className="flex h-full w-full items-center justify-start select-none"
       onMouseEnter={() => {
         setHover(true)
         untuck()

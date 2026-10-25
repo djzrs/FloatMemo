@@ -169,6 +169,30 @@ fn nearest_edge(r: &Rect, cx: i32, cy: i32) -> Edge {
         .unwrap_or(Edge::Right)
 }
 
+/// 拖动中：按鼠标位移移动球窗（dx/dy 为 CSS 像素，内部换算成物理像素）
+#[tauri::command]
+fn move_ball_by(app: AppHandle, dx: f64, dy: f64) -> Result<(), String> {
+    let ball = app
+        .get_webview_window(BALL)
+        .ok_or_else(|| "球窗不存在".to_string())?;
+    let s = scale_of(&ball);
+    let pos = ball.outer_position().map_err(|e| e.to_string())?;
+    let nx = pos.x + (dx * s).round() as i32;
+    let ny = pos.y + (dy * s).round() as i32;
+    // 留一点余量，允许球被拖到屏幕外一点点，但别整个消失
+    let limit = if let Some(r) = screen_rect(&ball) {
+        let span = (BALL_WIN * s).round() as i32;
+        (
+            nx.clamp(r.x - span, r.x + r.w - 8),
+            ny.clamp(r.y - span, r.y + r.h - 8),
+        )
+    } else {
+        (nx, ny)
+    };
+    ball.set_position(PhysicalPosition::new(limit.0, limit.1))
+        .map_err(|e| e.to_string())
+}
+
 /// 拖动结束：按最近的边吸附，并记住这条边与沿边位置
 #[tauri::command]
 fn snap_ball(app: AppHandle) -> Result<(), String> {
@@ -352,6 +376,7 @@ pub fn run() {
             show_ball_menu,
             collapse_ball,
             open_panel_page,
+            move_ball_by,
             snap_ball,
             set_ball_hidden,
             hide_window,

@@ -18,6 +18,12 @@ export async function expandQuick(): Promise<boolean> {
   return true
 }
 
+/** 拖动中：按鼠标位移移动球窗（dx/dy 单位为 CSS 像素） */
+export async function moveBallBy(dx: number, dy: number): Promise<void> {
+  if (!isDesktop) return
+  await invoke('move_ball_by', { dx, dy })
+}
+
 /** 拖动结束后吸附到最近的屏幕边缘 */
 export async function snapBall(): Promise<void> {
   if (!isDesktop) return
