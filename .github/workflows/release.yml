@@ -43,16 +43,29 @@ jobs:
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
           releaseName: 'FloatMemo ${{ github.event.inputs.tag || github.ref_name }}'
           releaseBody: 'Windows 悬浮便签 · 悬浮球速记'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc
-          bundlePath: target/release/bundle
+          bundlePath: target/x86_64-pc-windows-msvc/release/bundle
+
+      - name: 上传免安装版到 Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          $exe = Get-ChildItem -Path target/x86_64-pc-windows-msvc/release/floatmemo.exe -ErrorAction SilentlyContinue
+          if (-not $exe) { $exe = Get-Item target/release/floatmemo.exe }
+          $name = "FloatMemo-portable.exe"
+          gh release upload $env:TAG $exe.FullName --clobber --repo $env:GITHUB_REPOSITORY
 
       - name: 上传构建产物到 Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: floatmemo-windows-x64
           path: |
+            target/x86_64-pc-windows-msvc/release/floatmemo.exe
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             target/release/floatmemo.exe
             target/release/bundle/nsis/*.exe
           if-no-files-found: error
