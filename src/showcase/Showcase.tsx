@@ -187,12 +187,10 @@ export function Showcase() {
             ))}
           </nav>
           <a
-            href="?win=panel"
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto flex items-center gap-1.5 rounded-[8px] border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px] text-white/70 transition-colors hover:bg-white/[0.1]"
+            href="?demo=desktop"
+            className="ml-auto flex items-center gap-1.5 rounded-[8px] border border-brand-400/30 bg-brand-500/15 px-3 py-1.5 text-[11px] font-medium text-brand-200 transition-colors hover:bg-brand-500/25"
           >
-            打开面板窗口
+            体验桌面演示
             <ArrowUpRight size={11} strokeWidth={2.2} />
           </a>
         </div>
@@ -233,6 +231,7 @@ export function Showcase() {
             <div className="mt-7 flex flex-wrap items-center gap-2.5">
               <span className="text-[10.5px] text-white/25">单独打开窗口</span>
               {[
+                { label: '桌面演示', href: '?demo=desktop', accent: true },
                 { label: '悬浮球', href: '?win=ball' },
                 { label: '速记条', href: '?win=quick' },
                 { label: '面板', href: '?win=panel' },
@@ -240,12 +239,19 @@ export function Showcase() {
                 <a
                   key={l.href}
                   href={l.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10.5px] text-white/55 transition-colors hover:bg-white/[0.09] hover:text-white/85"
+                  className={`group inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10.5px] transition-colors ${
+                    l.accent
+                      ? 'border-brand-400/30 bg-brand-500/15 text-brand-200 hover:bg-brand-500/25'
+                      : 'border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.09] hover:text-white/85'
+                  }`}
                 >
                   {l.label}
-                  <ArrowUpRight size={10} className="text-white/25 group-hover:text-white/60" />
+                  <ArrowUpRight
+                    size={10}
+                    className={
+                      l.accent ? 'text-brand-300/70' : 'text-white/25 group-hover:text-white/60'
+                    }
+                  />
                 </a>
               ))}
             </div>

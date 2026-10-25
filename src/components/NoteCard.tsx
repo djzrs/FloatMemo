@@ -1,8 +1,8 @@
-import { MoreHorizontal, Pencil, Pin, Trash2, type LucideIcon } from 'lucide-react'
-import { useState } from 'react'
+import { Pin } from 'lucide-react'
 import { NOTE_COLORS } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
+import { NoteMenu } from './NoteMenu'
 
 type Props = {
   note: Note
@@ -11,36 +11,8 @@ type Props = {
   onArchive: () => void
 }
 
-function MenuItem({
-  icon: Icon,
-  label,
-  danger,
-  onClick,
-}: {
-  icon: LucideIcon
-  label: string
-  danger?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex h-[28px] w-full items-center gap-2 rounded-[7px] px-2 text-left text-[11.5px] transition-colors ${
-        danger
-          ? 'text-ink-600 hover:bg-rose-50 hover:text-rose-600'
-          : 'text-ink-700 hover:bg-ink-50'
-      }`}
-    >
-      <Icon size={13} strokeWidth={1.9} className={danger ? 'text-rose-400' : 'text-ink-400'} />
-      {label}
-    </button>
-  )
-}
-
 export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
   const c = NOTE_COLORS[note.color]
-  const [menu, setMenu] = useState(false)
 
   return (
     <article
@@ -77,20 +49,14 @@ export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
             <Pin size={10} strokeWidth={2.4} fill={note.pinned ? 'currentColor' : 'none'} />
           </button>
 
-          <button
-            type="button"
-            aria-label="更多操作"
-            onClick={(e) => {
-              e.stopPropagation()
-              setMenu((v) => !v)
-            }}
-            className={`grid h-[18px] w-[18px] place-items-center rounded-full transition-opacity ${
-              menu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            }`}
-            style={{ color: c.sub }}
-          >
-            <MoreHorizontal size={14} strokeWidth={2.2} />
-          </button>
+          <NoteMenu
+            pinned={note.pinned}
+            onEdit={onOpen}
+            onTogglePin={onTogglePin}
+            onArchive={onArchive}
+            triggerClassName="h-[18px] w-[18px]"
+            iconColor={c.sub}
+          />
         </div>
       </div>
 
@@ -121,49 +87,6 @@ export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
           {formatRelative(note.updatedAt)}
         </time>
       </div>
-
-      {menu && (
-        <>
-          <div
-            className="fixed inset-0 z-20 cursor-default"
-            onClick={(e) => {
-              e.stopPropagation()
-              setMenu(false)
-            }}
-          />
-          <div
-            className="absolute top-[34px] right-2 z-30 w-[150px] rounded-[10px] border border-ink-100 bg-white p-1 shadow-[0_18px_36px_-14px_rgba(6,29,29,0.35)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MenuItem
-              icon={Pencil}
-              label="编辑"
-              onClick={() => {
-                setMenu(false)
-                onOpen()
-              }}
-            />
-            <MenuItem
-              icon={Pin}
-              label={note.pinned ? '取消置顶' : '置顶'}
-              onClick={() => {
-                setMenu(false)
-                onTogglePin()
-              }}
-            />
-            <div className="mx-1 my-1 h-px bg-ink-100" />
-            <MenuItem
-              icon={Trash2}
-              label="移到回收站"
-              danger
-              onClick={() => {
-                setMenu(false)
-                onArchive()
-              }}
-            />
-          </div>
-        </>
-      )}
     </article>
   )
 }

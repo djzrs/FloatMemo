@@ -1,8 +1,8 @@
-import { Trash2 } from 'lucide-react'
+import { Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
-import type { NoteDraft } from '../stores/notes'
+import { normalizeTags, TAG_MAX_COUNT, type NoteDraft } from '../stores/notes'
 
 type Props = {
   note?: Note | null
@@ -18,6 +18,8 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
   const [title, setTitle] = useState(note?.title ?? '')
   const [content, setContent] = useState(note?.content ?? '')
   const [color, setColor] = useState<NoteColorKey>(note?.color ?? defaultColor)
+  const [tags, setTags] = useState<string[]>(note?.tags ?? [])
+  const [tagInput, setTagInput] = useState('')
 
   const titleRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
@@ -34,9 +36,15 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
   const canSave = Boolean(title.trim() || content.trim())
   const tone = NOTE_COLORS[color]
 
+  const addTag = () => {
+    if (!tagInput.trim()) return
+    setTags((prev) => normalizeTags([...prev, tagInput]))
+    setTagInput('')
+  }
+
   const save = () => {
     if (!canSave) return
-    onSave({ title, content, color })
+    onSave({ title, content, color, tags: normalizeTags([...tags, tagInput]) })
   }
 
   return (
@@ -97,6 +105,43 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
             spellCheck={false}
             className="mt-2 h-[196px] w-full resize-none bg-transparent text-[13px] leading-[24px] text-ink-700 outline-none placeholder:text-ink-300"
           />
+
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1 rounded-full py-[2px] pr-1 pl-2 text-[10.5px]"
+                style={{ background: `${tone.dot}22`, color: tone.ink }}
+              >
+                #{tag}
+                <button
+                  type="button"
+                  aria-label={`移除标签 ${tag}`}
+                  onClick={() => setTags((prev) => prev.filter((t) => t !== tag))}
+                  className="grid h-[13px] w-[13px] place-items-center rounded-full opacity-60 transition-opacity hover:bg-black/5 hover:opacity-100"
+                >
+                  <X size={8.5} strokeWidth={2.6} />
+                </button>
+              </span>
+            ))}
+            <input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',' || e.key === '，') {
+                  e.preventDefault()
+                  addTag()
+                }
+                if (e.key === 'Backspace' && !tagInput && tags.length > 0) {
+                  setTags((prev) => prev.slice(0, -1))
+                }
+              }}
+              onBlur={addTag}
+              disabled={tags.length >= TAG_MAX_COUNT}
+              placeholder={tags.length >= TAG_MAX_COUNT ? '标签已达上限' : '+ 标签'}
+              className="h-[20px] w-[70px] bg-transparent text-[10.5px] text-ink-600 outline-none placeholder:text-ink-300 disabled:cursor-not-allowed"
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 border-t border-ink-100 px-5 py-2.5">

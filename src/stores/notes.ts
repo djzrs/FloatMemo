@@ -7,6 +7,20 @@ export type NoteDraft = {
   title: string
   content: string
   color: NoteColorKey
+  tags?: string[]
+}
+
+export const TAG_MAX_LENGTH = 12
+export const TAG_MAX_COUNT = 8
+
+/** 规整标签：去 #、去空白、去重、限量 */
+export function normalizeTags(tags: string[]): string[] {
+  const out: string[] = []
+  tags.forEach((raw) => {
+    const tag = raw.replace(/^#+/, '').trim().slice(0, TAG_MAX_LENGTH)
+    if (tag && !out.includes(tag) && out.length < TAG_MAX_COUNT) out.push(tag)
+  })
+  return out
 }
 
 type NotesState = {
@@ -55,7 +69,7 @@ export const useNotesStore = create<NotesState>()(
           color: draft.color,
           pinned: false,
           archived: false,
-          tags: [],
+          tags: normalizeTags(draft.tags ?? []),
           createdAt: now,
           updatedAt: now,
         }
@@ -75,6 +89,7 @@ export const useNotesStore = create<NotesState>()(
               ...draft,
               content,
               title: rawTitle.trim() || deriveTitle(content),
+              tags: draft.tags ? normalizeTags(draft.tags) : note.tags,
               updatedAt: now,
             }
           }),
