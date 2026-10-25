@@ -2,16 +2,21 @@ import {
   ChevronDown,
   Circle,
   Database,
-  FolderOpen,
+  Download,
   Info,
   Keyboard,
   Palette,
   SlidersHorizontal,
+  Upload,
   Zap,
   type LucideIcon,
 } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { COLOR_ORDER, NOTE_COLORS } from '../data/colors'
+import { exportJson, exportMarkdown, parseBackup } from '../lib/backup'
+import { useNotesStore } from '../stores/notes'
+import { useSettingsStore, type CardDensity, type PanelView } from '../stores/settings'
+import { Ball } from './Ball'
 
 type SectionKey = 'general' | 'shortcut' | 'ball' | 'data' | 'about'
 
@@ -23,9 +28,13 @@ const NAV: { key: SectionKey; label: string; icon: LucideIcon }[] = [
   { key: 'about', label: '关于', icon: Info },
 ]
 
-function Toggle({ on }: { on?: boolean }) {
+function Toggle({ on, onChange }: { on: boolean; onChange?: () => void }) {
   return (
-    <span
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onChange}
       className={`relative inline-block h-[20px] w-[34px] shrink-0 rounded-full transition-colors ${
         on ? 'bg-brand-500' : 'bg-ink-200'
       }`}
@@ -35,7 +44,7 @@ function Toggle({ on }: { on?: boolean }) {
           on ? 'left-[16px]' : 'left-[2px]'
         }`}
       />
-    </span>
+    </button>
   )
 }
 
@@ -83,6 +92,36 @@ function Select({ value }: { value: string }) {
   )
 }
 
+function Segmented<T extends string | number>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (value: T) => void
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-[8px] bg-ink-100/70 p-0.5">
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          type="button"
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          className={`h-[26px] rounded-[6px] px-2.5 text-[11px] transition-all ${
+            value === o.value
+              ? 'bg-white font-medium text-ink-800 shadow-[0_1px_2px_rgba(15,45,45,0.1)]'
+              : 'text-ink-500 hover:text-ink-700'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Key({ children }: { children: ReactNode }) {
   return (
     <kbd className="inline-flex h-[24px] min-w-[24px] items-center justify-center rounded-[6px] border border-ink-200/90 border-b-[2px] bg-white px-1.5 font-sans text-[10.5px] font-medium text-ink-600">
@@ -91,8 +130,62 @@ function Key({ children }: { children: ReactNode }) {
   )
 }
 
+function OutlineButton({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: LucideIcon
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-[28px] items-center gap-1.5 rounded-[7px] border border-ink-200/80 bg-white px-2.5 text-[11px] text-ink-600 transition-colors hover:bg-ink-50"
+    >
+      <Icon size={11} strokeWidth={2} />
+      {label}
+    </button>
+  )
+}
+
 export function SettingsView() {
   const [active, setActive] = useState<SectionKey>('general')
+
+  const settings = useSettingsStore()
+  const notes = useNotesStore((s) => s.notes)
+  const importNotes = useNotesStore((s) => s.importNotes)
+
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const statusTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => window.clearTimeout(statusTimer.current), [])
+
+  const flash = (ok: boolean, text: string) => {
+    setStatus({ ok, text })
+    window.clearTimeout(statusTimer.current)
+    statusTimer.current = window.setTimeout(() => setStatus(null), 4000)
+  }
+
+  const handleFile = async (file?: File) => {
+    if (!file) return
+    try {
+      const parsed = parseBackup(await file.text())
+      const added = importNotes(parsed)
+      flash(true, added > 0 ? `已导入 ${added} 条便签` : '这些便签已经在列表里了')
+    } catch (error) {
+      flash(false, error instanceof Error ? error.message : '导入失败')
+    } finally {
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const activeCount = notes.filter((n) => !n.archived).length
+  const pinnedCount = notes.filter((n) => n.pinned && !n.archived).length
+  const trashCount = notes.filter((n) => n.archived).length
 
   return (
     <div className="flex h-full">
@@ -128,10 +221,10 @@ export function SettingsView() {
               {NAV.find((n) => n.key === active)?.label}
             </h2>
             <p className="mt-1 mb-3.5 text-[11px] text-ink-400">
-              {active === 'general' && '启动方式与窗口行为'}
+              {active === 'general' && '启动方式、默认外观与面板行为'}
               {active === 'shortcut' && '全局快捷键在任何窗口下都可以唤起速记'}
-              {active === 'ball' && '调整悬浮球的显隐、透明度与停靠位置'}
-              {active === 'data' && '所有便签保存在本地 SQLite，不上传云端'}
+              {active === 'ball' && '调整悬浮球的显隐与透明度'}
+              {active === 'data' && '便签全部保存在本地，可随时导出备份'}
               {active === 'about' && '关于浮笺'}
             </p>
 
@@ -139,10 +232,16 @@ export function SettingsView() {
               <>
                 <Card icon={SlidersHorizontal} title="启动与窗口">
                   <Row title="开机自启" desc="登录 Windows 后自动启动浮笺">
-                    <Toggle on />
+                    <Toggle
+                      on={settings.autoStart}
+                      onChange={() => settings.patch({ autoStart: !settings.autoStart })}
+                    />
                   </Row>
                   <Row title="关闭面板时最小化到托盘" desc="进程常驻，悬浮球与快捷键继续可用">
-                    <Toggle on />
+                    <Toggle
+                      on={settings.minimizeToTray}
+                      onChange={() => settings.patch({ minimizeToTray: !settings.minimizeToTray })}
+                    />
                   </Row>
                   <Row title="界面语言" desc="需要重启生效">
                     <Select value="简体中文" />
@@ -150,58 +249,71 @@ export function SettingsView() {
                 </Card>
 
                 <Card icon={Palette} title="外观与便签">
-                  <Row title="默认便签颜色" desc="新建速记时预选的颜色">
+                  <Row title="默认便签颜色" desc="新建便签时预选的颜色，会记住上次选择">
                     <div className="flex items-center gap-1.5">
-                      {COLOR_ORDER.map((k, i) => (
-                        <span
-                          key={k}
-                          className={`h-[15px] w-[15px] rounded-full ${
-                            i === 1 ? 'ring-2 ring-white ring-offset-1' : ''
-                          }`}
-                          style={{
-                            background: NOTE_COLORS[k].dot,
-                            boxShadow:
-                              i === 1
-                                ? `0 0 0 1px ${NOTE_COLORS[k].dot}`
+                      {COLOR_ORDER.map((key) => {
+                        const c = NOTE_COLORS[key]
+                        const on = settings.defaultColor === key
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            aria-label={c.label}
+                            onClick={() => settings.patch({ defaultColor: key })}
+                            className={`h-[16px] w-[16px] rounded-full transition-transform ${
+                              on
+                                ? 'scale-[1.15] ring-2 ring-white ring-offset-1'
+                                : 'hover:scale-110'
+                            }`}
+                            style={{
+                              background: c.dot,
+                              boxShadow: on
+                                ? `0 0 0 1px ${c.dot}`
                                 : 'inset 0 0 0 1px rgba(0,0,0,0.07)',
-                          }}
-                        />
-                      ))}
+                            }}
+                          />
+                        )
+                      })}
                     </div>
                   </Row>
-                  <Row title="卡片密度" desc="影响管理面板中便签的正文字号与行高">
-                    <div className="flex items-center gap-1 rounded-[8px] bg-ink-100/70 p-0.5">
-                      {['紧凑', '标准', '宽松'].map((v, i) => (
-                        <button
-                          key={v}
-                          type="button"
-                          className={`h-[26px] rounded-[6px] px-2.5 text-[11px] transition-all ${
-                            i === 1
-                              ? 'bg-white font-medium text-ink-800 shadow-[0_1px_2px_rgba(15,45,45,0.1)]'
-                              : 'text-ink-500'
-                          }`}
-                        >
-                          {v}
-                        </button>
-                      ))}
-                    </div>
+                  <Row title="卡片密度" desc="影响标题字号、正文行高与显示行数">
+                    <Segmented<CardDensity>
+                      value={settings.cardDensity}
+                      options={[
+                        { value: 'compact', label: '紧凑' },
+                        { value: 'cozy', label: '标准' },
+                        { value: 'relaxed', label: '宽松' },
+                      ]}
+                      onChange={(v) => settings.patch({ cardDensity: v })}
+                    />
                   </Row>
-                  <Row title="界面缩放" desc="高分屏下界面偏小时可手动调大">
-                    <Select value="跟随系统 · 100%" />
+                  <Row title="默认视图" desc="打开面板时的排布方式">
+                    <Segmented<PanelView>
+                      value={settings.defaultView}
+                      options={[
+                        { value: 'grid', label: '网格' },
+                        { value: 'list', label: '列表' },
+                      ]}
+                      onChange={(v) => settings.patch({ defaultView: v })}
+                    />
                   </Row>
                 </Card>
 
                 <Card icon={Zap} title="性能">
-                  <Row title="关闭面板后释放内存" desc="面板关闭即销毁，仅悬浮球常驻（约 50MB）">
-                    <Toggle on />
+                  <Row title="动画效果" desc="关闭后所有过渡瞬时完成，进一步降低占用">
+                    <Toggle
+                      on={settings.animations}
+                      onChange={() => settings.patch({ animations: !settings.animations })}
+                    />
                   </Row>
-                  <Row title="动画效果" desc="关闭后所有过渡变为瞬时切换，进一步降低占用">
-                    <Toggle on />
+                  <Row title="空闲开销" desc="全部事件驱动，没有轮询与常驻计时器">
+                    <span className="text-[11px] text-ink-400">0 轮询</span>
                   </Row>
                 </Card>
 
                 <p className="px-1 text-[10.5px] leading-[17px] text-ink-300">
-                  浮笺不联网、不上传任何数据；便签与设置全部保存在本机。
+                  开机自启与托盘行为需要 Tauri
+                  桌面版支持；浏览器预览里只保存偏好，不会真的改动系统。
                 </p>
               </>
             )}
@@ -227,19 +339,18 @@ export function SettingsView() {
                       <Key>M</Key>
                     </div>
                   </Row>
-                  <Row title="恢复默认" desc="快捷键被其他程序占用时会在此处提示">
-                    <button
-                      type="button"
-                      className="h-[28px] rounded-[7px] border border-ink-200/80 bg-white px-2.5 text-[11px] text-ink-600 transition-colors hover:bg-ink-50"
-                    >
-                      恢复默认
-                    </button>
+                  <Row title="面板内搜索" desc="光标在面板里时可直接按下">
+                    <div className="flex items-center gap-1">
+                      <Key>Ctrl</Key>
+                      <span className="text-[10px] text-ink-300">+</span>
+                      <Key>K</Key>
+                    </div>
                   </Row>
                 </Card>
-                <Card icon={Info} title="提示">
+                <Card icon={Info} title="说明">
                   <p className="py-2.5 text-[11px] leading-[18px] text-ink-500">
-                    点击右侧组合键即可重新录制，按 Esc 退出录制。建议避开 Ctrl+Shift+S、Ctrl+Shift+V
-                    等被常用软件占用的组合。
+                    全局快捷键需要 Tauri 注册；面板内的 Ctrl + K
+                    已可用。若快捷键被其他软件占用，桌面版会在托盘提示并允许改键。
                   </p>
                 </Card>
               </>
@@ -249,73 +360,140 @@ export function SettingsView() {
               <>
                 <Card icon={Circle} title="外观与停靠">
                   <Row title="半隐藏" desc="贴边时只保留 6px，鼠标靠近自动滑出">
-                    <Toggle on />
+                    <Toggle
+                      on={settings.halfHidden}
+                      onChange={() => settings.patch({ halfHidden: !settings.halfHidden })}
+                    />
                   </Row>
                   <Row title="透明度" desc="拖动时仍会临时降到 80% 以便观察">
-                    <div className="flex items-center gap-1 rounded-[8px] bg-ink-100/70 p-0.5">
-                      {['100%', '85%', '70%'].map((v, i) => (
-                        <button
-                          key={v}
-                          type="button"
-                          className={`h-[26px] rounded-[6px] px-2.5 text-[11px] transition-all ${
-                            i === 1
-                              ? 'bg-white font-medium text-ink-800 shadow-[0_1px_2px_rgba(15,45,45,0.1)]'
-                              : 'text-ink-500'
-                          }`}
-                        >
-                          {v}
-                        </button>
-                      ))}
-                    </div>
+                    <Segmented<0 | 1 | 2>
+                      value={settings.ballOpacity}
+                      options={[
+                        { value: 0, label: '100%' },
+                        { value: 1, label: '85%' },
+                        { value: 2, label: '70%' },
+                      ]}
+                      onChange={(v) => settings.patch({ ballOpacity: v })}
+                    />
                   </Row>
-                  <Row title="停靠边缘" desc="拖动松手后自动吸附到最近的屏幕边缘">
-                    <Select value="自动（就近）" />
-                  </Row>
-                  <Row title="位置" desc="右侧 · 垂直 42%">
-                    <button
-                      type="button"
-                      className="flex h-[28px] items-center gap-1.5 rounded-[7px] border border-ink-200/80 bg-white px-2.5 text-[11px] text-ink-600 transition-colors hover:bg-ink-50"
-                    >
-                      <Circle size={11} />
-                      重置位置
-                    </button>
+                  <Row title="实际效果" desc="在桌面演示里试一下贴边、悬停与右键菜单">
+                    <OutlineButton
+                      icon={Circle}
+                      label="打开桌面演示"
+                      onClick={() => window.open('/?demo=desktop', '_blank', 'noopener')}
+                    />
                   </Row>
                 </Card>
+
+                <section className="overflow-hidden rounded-[12px] border border-line bg-white shadow-[0_1px_2px_rgba(15,45,45,0.04)]">
+                  <header className="flex items-center justify-between border-b border-ink-100/80 bg-ink-50/60 px-4 py-2">
+                    <span className="text-[12px] font-semibold tracking-[0.02em] text-ink-800">
+                      预览
+                    </span>
+                    <span className="text-[10px] text-ink-400">贴右边缘时的两种状态</span>
+                  </header>
+                  <div className="grid grid-cols-2 gap-3 p-3">
+                    <div className="relative h-[124px] overflow-clip rounded-[10px] bg-[#0a2526]">
+                      <div className="pointer-events-none absolute -top-8 -left-6 h-28 w-28 rounded-full bg-brand-500/15 blur-2xl" />
+                      <span className="absolute top-2.5 left-3 text-[9.5px] text-white/45">
+                        悬停 / 展开
+                      </span>
+                      <div className="grid h-full place-items-center">
+                        <Ball level={settings.ballOpacity} state="hover" />
+                      </div>
+                    </div>
+
+                    <div className="relative h-[124px] overflow-clip rounded-[10px] bg-[#0a2526]">
+                      <div className="pointer-events-none absolute -top-8 right-0 h-28 w-28 rounded-full bg-brand-500/15 blur-2xl" />
+                      <span className="absolute top-2.5 left-3 text-[9.5px] text-white/45">
+                        静止 / 贴边
+                      </span>
+                      <div
+                        className="absolute top-1/2 right-0"
+                        style={{
+                          transform: `translate(${settings.halfHidden ? 58 : 0}px, -50%)`,
+                          transition: 'transform 260ms cubic-bezier(0.2,0.8,0.2,1)',
+                        }}
+                      >
+                        <Ball level={settings.ballOpacity} />
+                      </div>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-white/[0.15]" />
+                      <span className="absolute bottom-2.5 left-3 text-[9.5px] text-white/40">
+                        {settings.halfHidden ? '仅露 6px' : '完整显示'}
+                        {' · '}
+                        {['100%', '85%', '70%'][settings.ballOpacity]}
+                      </span>
+                    </div>
+                  </div>
+                </section>
               </>
             )}
 
             {active === 'data' && (
               <>
-                <Card icon={Database} title="存储">
-                  <Row title="数据文件" desc="%APPDATA%\FloatMemo\memo.db">
-                    <button
-                      type="button"
-                      className="flex h-[28px] items-center gap-1.5 rounded-[7px] border border-ink-200/80 bg-white px-2.5 text-[11px] text-ink-600 transition-colors hover:bg-ink-50"
-                    >
-                      <FolderOpen size={11} />
-                      打开文件夹
-                    </button>
+                <Card icon={Database} title="本地数据">
+                  <Row title="便签数量" desc="不含回收站">
+                    <span className="text-[12px] text-ink-600 tabular-nums">{activeCount} 条</span>
                   </Row>
-                  <Row title="便签数量" desc="含 2 条置顶，回收站 0 条">
-                    <span className="text-[12px] text-ink-600 tabular-nums">12 条</span>
+                  <Row title="置顶 / 回收站" desc="回收站里的便签也会写进 JSON 备份">
+                    <span className="text-[12px] text-ink-600 tabular-nums">
+                      {pinnedCount} / {trashCount}
+                    </span>
                   </Row>
-                  <Row title="导入 / 导出" desc="支持 Markdown 与 JSON，方便迁移">
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        className="h-[28px] rounded-[7px] border border-ink-200/80 bg-white px-2.5 text-[11px] text-ink-600 transition-colors hover:bg-ink-50"
-                      >
-                        导入
-                      </button>
-                      <button
-                        type="button"
-                        className="h-[28px] rounded-[7px] border border-ink-200/80 bg-white px-2.5 text-[11px] text-ink-600 transition-colors hover:bg-ink-50"
-                      >
-                        导出
-                      </button>
-                    </div>
+                  <Row title="存储位置" desc="浏览器预览为 localStorage，桌面版为 SQLite">
+                    <span className="font-mono text-[10.5px] text-ink-400">floatmemo.notes</span>
                   </Row>
                 </Card>
+
+                <Card icon={Upload} title="导入 / 导出">
+                  <Row title="导出备份" desc="JSON 可原样导入，包含颜色、标签与回收站状态">
+                    <div className="flex gap-1.5">
+                      <OutlineButton
+                        icon={Download}
+                        label="JSON"
+                        onClick={() => {
+                          exportJson(notes)
+                          flash(true, `已导出 ${notes.length} 条便签到 JSON`)
+                        }}
+                      />
+                      <OutlineButton
+                        icon={Download}
+                        label="Markdown"
+                        onClick={() => {
+                          exportMarkdown(notes)
+                          flash(true, `已导出 ${notes.length} 条便签到 Markdown`)
+                        }}
+                      />
+                    </div>
+                  </Row>
+                  <Row title="导入备份" desc="选择之前导出的 JSON，重复的便签会自动跳过">
+                    <OutlineButton
+                      icon={Upload}
+                      label="选择文件"
+                      onClick={() => fileRef.current?.click()}
+                    />
+                  </Row>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => void handleFile(e.target.files?.[0])}
+                  />
+                  {status && (
+                    <div
+                      className={`py-2 text-[10.5px] ${
+                        status.ok ? 'text-brand-700' : 'text-rose-600'
+                      }`}
+                    >
+                      {status.text}
+                    </div>
+                  )}
+                </Card>
+
+                <p className="px-1 text-[10.5px] leading-[17px] text-ink-300">
+                  Markdown 导出为单个文件，按「二级标题 + 标签 + 正文」组织，方便贴到别处。
+                </p>
               </>
             )}
 
@@ -334,7 +512,7 @@ export function SettingsView() {
                         FLOATMEMO
                       </span>
                     </div>
-                    <p className="mt-0.5 text-[10.5px] text-ink-400">v0.1.0 · 界面预览版</p>
+                    <p className="mt-0.5 text-[10.5px] text-ink-400">v0.1.0 · 本地预览版</p>
                   </div>
                 </div>
                 <div className="px-5 py-3.5">

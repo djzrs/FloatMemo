@@ -1,0 +1,87 @@
+import { create } from 'zustand'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import type { NoteColorKey } from '../data/colors'
+
+export type CardDensity = 'compact' | 'cozy' | 'relaxed'
+export type PanelView = 'grid' | 'list'
+
+export type Settings = {
+  /** 新建便签的默认颜色（也会记住上次使用的颜色） */
+  defaultColor: NoteColorKey
+  /** 卡片密度：影响标题字号、正文字号与行数上限 */
+  cardDensity: CardDensity
+  /** 关掉后所有过渡动画瞬时完成 */
+  animations: boolean
+  /** 悬浮球透明度 0=100% / 1=85% / 2=70% */
+  ballOpacity: 0 | 1 | 2
+  /** 贴边时是否只露 6px */
+  halfHidden: boolean
+  defaultView: PanelView
+  /** 以下两项需要 Tauri 层才能真正生效，先存下来 */
+  autoStart: boolean
+  minimizeToTray: boolean
+}
+
+type SettingsState = Settings & {
+  patch: (partial: Partial<Settings>) => void
+}
+
+const DEFAULTS: Settings = {
+  defaultColor: 'yellow',
+  cardDensity: 'cozy',
+  animations: true,
+  ballOpacity: 0,
+  halfHidden: true,
+  defaultView: 'grid',
+  autoStart: true,
+  minimizeToTray: true,
+}
+
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set) => ({
+      ...DEFAULTS,
+      patch: (partial) => set(partial),
+    }),
+    {
+      name: 'floatmemo.settings',
+      version: 1,
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        defaultColor: state.defaultColor,
+        cardDensity: state.cardDensity,
+        animations: state.animations,
+        ballOpacity: state.ballOpacity,
+        halfHidden: state.halfHidden,
+        defaultView: state.defaultView,
+        autoStart: state.autoStart,
+        minimizeToTray: state.minimizeToTray,
+      }),
+    },
+  ),
+)
+
+/** 卡片密度对应的排版参数 */
+export const DENSITY_STYLES: Record<
+  CardDensity,
+  { title: string; body: string; clamp: string; gap: string }
+> = {
+  compact: {
+    title: 'text-[13px] leading-[19px]',
+    body: 'text-[11.5px] leading-[1.6] line-clamp-3',
+    clamp: 'line-clamp-3',
+    gap: 'gap-2.5',
+  },
+  cozy: {
+    title: 'text-[13.5px] leading-[20px]',
+    body: 'text-[12px] leading-[1.68] line-clamp-4',
+    clamp: 'line-clamp-4',
+    gap: 'gap-3',
+  },
+  relaxed: {
+    title: 'text-[14px] leading-[21px]',
+    body: 'text-[12.5px] leading-[1.75] line-clamp-5',
+    clamp: 'line-clamp-5',
+    gap: 'gap-3.5',
+  },
+}

@@ -22,6 +22,7 @@ import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
 import { useNotesStore } from '../stores/notes'
+import { DENSITY_STYLES, useSettingsStore } from '../stores/settings'
 import { Logomark } from './Logomark'
 import { NoteCard } from './NoteCard'
 import { NoteEditor } from './NoteEditor'
@@ -161,12 +162,13 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('updated')
   const [sortOpen, setSortOpen] = useState(false)
-  const [view, setView] = useState<'grid' | 'list'>(() =>
-    localStorage.getItem('floatmemo.view') === 'list' ? 'list' : 'grid',
-  )
   const [editing, setEditing] = useState<{ note: Note | null } | null>(null)
-  const [lastColor, setLastColor] = useState<NoteColorKey>('yellow')
   const [toast, setToast] = useState<string | null>(null)
+
+  const view = useSettingsStore((s) => s.defaultView)
+  const density = useSettingsStore((s) => s.cardDensity)
+  const defaultColor = useSettingsStore((s) => s.defaultColor)
+  const patchSettings = useSettingsStore((s) => s.patch)
 
   const searchRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef<number | undefined>(undefined)
@@ -386,10 +388,7 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
             <div className="flex items-center gap-0.5 rounded-[9px] bg-ink-100/80 p-0.5">
               <button
                 type="button"
-                onClick={() => {
-                  setView('grid')
-                  localStorage.setItem('floatmemo.view', 'grid')
-                }}
+                onClick={() => patchSettings({ defaultView: 'grid' })}
                 className={`grid h-[26px] w-[26px] place-items-center rounded-[7px] transition-colors ${
                   view === 'grid'
                     ? 'bg-white text-ink-700 shadow-[0_1px_2px_rgba(15,45,45,0.1)]'
@@ -402,10 +401,7 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setView('list')
-                  localStorage.setItem('floatmemo.view', 'list')
-                }}
+                onClick={() => patchSettings({ defaultView: 'list' })}
                 className={`grid h-[26px] w-[26px] place-items-center rounded-[7px] transition-colors ${
                   view === 'list'
                     ? 'bg-white text-ink-700 shadow-[0_1px_2px_rgba(15,45,45,0.1)]'
@@ -556,7 +552,9 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
 
               {list.length > 0 ? (
                 view === 'grid' ? (
-                  <div className="mt-3.5 grid grid-cols-3 items-stretch gap-3">
+                  <div
+                    className={`mt-3.5 grid grid-cols-3 items-stretch ${DENSITY_STYLES[density].gap}`}
+                  >
                     {list.map((note) => (
                       <NoteCard
                         key={note.id}
@@ -636,7 +634,7 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
       {editing && (
         <NoteEditor
           note={editing.note}
-          defaultColor={lastColor}
+          defaultColor={defaultColor}
           onClose={() => setEditing(null)}
           onArchive={
             editing.note
@@ -655,7 +653,7 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
               addNote(draft)
               showToast('已保存')
             }
-            setLastColor(draft.color)
+            patchSettings({ defaultColor: draft.color })
             setEditing(null)
           }}
         />

@@ -159,3 +159,12 @@
     animation: none;
   }
 }
+
+/* 设置里关闭「动画效果」时，所有过渡瞬时完成 */
+html[data-motion='off'] *,
+html[data-motion='off'] *::before,
+html[data-motion='off'] *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
