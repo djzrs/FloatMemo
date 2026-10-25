@@ -32,6 +32,7 @@ export function BallWindow() {
   const addNote = useNotesStore((s) => s.addNote)
   const ballOpacity = useSettingsStore((s) => s.ballOpacity)
   const halfHidden = useSettingsStore((s) => s.halfHidden)
+  const snapToEdge = useSettingsStore((s) => s.snapToEdge)
   const minimizeToTray = useSettingsStore((s) => s.minimizeToTray)
   const patchSettings = useSettingsStore((s) => s.patch)
 
@@ -43,8 +44,10 @@ export function BallWindow() {
     window.clearTimeout(idleTimer.current)
     if (!isDesktop || !halfHidden || mode !== 'ball') return
     idleTimer.current = window.setTimeout(() => {
-      setTucked(true)
-      void setBallHidden(true).catch(() => undefined)
+      // 只有真正藏起来了才记状态（自由位置无处可藏）
+      void setBallHidden(true).then((applied) => {
+        if (applied) setTucked(true)
+      })
     }, 3000)
   }, [halfHidden, mode])
 
@@ -108,11 +111,11 @@ export function BallWindow() {
       window.addEventListener('mouseup', () => {
         stop()
         if (!moved) return
-        void snapBall().catch(() => undefined)
+        void snapBall(snapToEdge).catch(() => undefined)
         untuck()
       })
     },
-    [untuck],
+    [untuck, snapToEdge],
   )
 
   const collapse = useCallback(async () => {

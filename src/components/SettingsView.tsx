@@ -387,6 +387,12 @@ export function SettingsView() {
                       onChange={() => settings.patch({ halfHidden: !settings.halfHidden })}
                     />
                   </Row>
+                  <Row title="自动吸附边缘" desc="关掉后悬浮球可以停在屏幕任意位置">
+                    <Toggle
+                      on={settings.snapToEdge}
+                      onChange={() => settings.patch({ snapToEdge: !settings.snapToEdge })}
+                    />
+                  </Row>
                   <Row title="透明度" desc="拖动时仍会临时降到 80% 以便观察">
                     <Segmented<0 | 1 | 2>
                       value={settings.ballOpacity}

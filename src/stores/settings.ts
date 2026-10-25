@@ -16,6 +16,8 @@ export type Settings = {
   ballOpacity: 0 | 1 | 2
   /** 贴边时是否只露 6px */
   halfHidden: boolean
+  /** 拖到边缘附近时自动吸附；关掉后球可以停在任何位置 */
+  snapToEdge: boolean
   defaultView: PanelView
   /** 以下两项需要 Tauri 层才能真正生效，先存下来 */
   autoStart: boolean
@@ -32,6 +34,7 @@ const DEFAULTS: Settings = {
   animations: true,
   ballOpacity: 0,
   halfHidden: true,
+  snapToEdge: true,
   defaultView: 'grid',
   autoStart: true,
   minimizeToTray: true,
@@ -53,6 +56,7 @@ export const useSettingsStore = create<SettingsState>()(
         animations: state.animations,
         ballOpacity: state.ballOpacity,
         halfHidden: state.halfHidden,
+        snapToEdge: state.snapToEdge,
         defaultView: state.defaultView,
         autoStart: state.autoStart,
         minimizeToTray: state.minimizeToTray,
