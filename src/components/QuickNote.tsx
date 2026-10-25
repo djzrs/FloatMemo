@@ -73,7 +73,7 @@ export function QuickNote({
       />
 
       {/* 拖动区 */}
-      <div className="flex items-center gap-2 px-4 pt-3">
+      <div data-tauri-drag-region className="flex items-center gap-2 px-4 pt-3">
         <div className="flex h-4 w-4 items-center justify-center">
           <Logomark className="h-4 w-4" />
         </div>
