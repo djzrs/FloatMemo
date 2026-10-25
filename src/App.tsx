@@ -28,6 +28,13 @@ export default function App() {
     document.documentElement.dataset.motion = animations ? 'on' : 'off'
   }, [animations])
 
+  // 桌面窗口不滚动：悬浮球的光晕比窗口大几像素，会撑出 WebView2 的滚动条
+  useEffect(() => {
+    if (!isDesktop) return
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+  }, [])
+
   // 桌面端：从 SQLite 载入便签，并在离开前把改动刷进库
   useEffect(() => {
     void initNotes()
