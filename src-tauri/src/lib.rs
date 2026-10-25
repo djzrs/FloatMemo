@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -20,16 +22,75 @@ const MENU_H: f64 = 372.0;
 const PANEL_W: f64 = 1080.0;
 const PANEL_H: f64 = 720.0;
 
-/// 显示器信息：缩放、逻辑尺寸、逻辑原点
-struct Screen {
-    scale: f64,
-    width: f64,
-    height: f64,
-    x: f64,
-    y: f64,
+/// 悬浮球停靠的边
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Edge {
+    Left,
+    Right,
+    Top,
+    Bottom,
 }
 
-fn screen_of(window: &WebviewWindow) -> Option<Screen> {
+/// 当前停靠边：拖动吸附后记住，展开/收起都以它为基准
+static EDGE: Mutex<Edge> = Mutex::new(Edge::Right);
+/// 沿边方向的坐标（上下边记 x，左右边记 y）
+static ALONG: Mutex<Option<i32>> = Mutex::new(None);
+
+fn edge() -> Edge {
+    EDGE.lock().map(|g| *g).unwrap_or(Edge::Right)
+}
+
+fn set_edge(e: Edge) {
+    if let Ok(mut g) = EDGE.lock() {
+        *g = e
+    }
+}
+
+fn along() -> Option<i32> {
+    ALONG.lock().ok().and_then(|g| *g)
+}
+
+fn set_along(v: Option<i32>) {
+    if let Ok(mut g) = ALONG.lock() {
+        *g = v
+    }
+}
+
+/// 显示器物理矩形
+struct Rect {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+fn screen_rect(window: &WebviewWindow) -> Option<Rect> {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())?;
+    let p = monitor.position();
+    let s = monitor.size();
+    Some(Rect {
+        x: p.x,
+        y: p.y,
+        w: s.width as i32,
+        h: s.height as i32,
+    })
+}
+
+fn scale_of(window: &WebviewWindow) -> f64 {
+    window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0)
+}
+
+fn monitor_of(window: &WebviewWindow) -> Option<(f64, f64)> {
     let monitor = window
         .current_monitor()
         .ok()
@@ -37,57 +98,142 @@ fn screen_of(window: &WebviewWindow) -> Option<Screen> {
         .or_else(|| window.primary_monitor().ok().flatten())?;
     let scale = monitor.scale_factor();
     let size = monitor.size().to_logical::<f64>(scale);
-    let origin = monitor.position().to_logical::<f64>(scale);
-    Some(Screen {
-        scale,
-        width: size.width,
-        height: size.height,
-        x: origin.x,
-        y: origin.y,
-    })
+    Some((size.width, size.height))
 }
 
-/// 球窗在屏幕上的基准位置（球体 10..64，右缘留 12px）。
-/// Windows 会给带边框样式的小窗强制 136px 最小宽度，球窗实际比 74 宽；
-/// 所以球在窗口内靠左摆放，多出来的透明部分留在屏幕外。
-fn ball_origin(window: &WebviewWindow) -> Option<PhysicalPosition<i32>> {
-    let screen = screen_of(window)?;
-    let x = screen.x + screen.width - 76.0;
-    let y = screen.y + (screen.height - BALL_WIN) / 2.0;
-    Some(tauri::LogicalPosition::new(x, y).to_physical::<i32>(screen.scale))
+fn along_value(v: Option<i32>, min: i32, max: i32) -> i32 {
+    let hi = max.max(min);
+    match v {
+        Some(x) => x.clamp(min, hi),
+        None => (min + hi) / 2,
+    }
 }
 
-/// 把悬浮球放到主屏右侧、垂直居中
-fn place_ball(window: &WebviewWindow) {
-    if let Some(pos) = ball_origin(window) {
+/// 球窗贴在某条边上的窗口坐标（hidden = 半隐藏，只露出 6px）
+/// 球体在窗口内占 10..64（逻辑），所以贴右时窗口左边 = 右边缘 - 76。
+fn slot(window: &WebviewWindow, e: Edge, hidden: bool, along: Option<i32>) -> Option<PhysicalPosition<i32>> {
+    let r = screen_rect(window)?;
+    let s = scale_of(window);
+    let px = |v: f64| (v * s).round() as i32;
+    let span = px(BALL_WIN);
+    // 半隐藏时球体只剩 6px 在屏幕内
+    let peek = px(6.0);
+    let out = px(58.0);
+    let inset = px(16.0);
+    let (x, y) = match e {
+        Edge::Left => (
+            r.x - if hidden { out } else { 0 },
+            along_value(along, r.y, r.y + r.h - span),
+        ),
+        Edge::Right => (
+            r.x + r.w - if hidden { inset } else { px(76.0) },
+            along_value(along, r.y, r.y + r.h - span),
+        ),
+        Edge::Top => (
+            along_value(along, r.x, r.x + r.w - px(76.0)),
+            r.y - if hidden { out } else { 0 },
+        ),
+        Edge::Bottom => (
+            along_value(along, r.x, r.x + r.w - px(76.0)),
+            r.y + r.h - if hidden { inset } else { px(74.0) },
+        ),
+    };
+    let _ = peek;
+    Some(PhysicalPosition::new(x, y))
+}
+
+/// 把球窗摆到当前停靠边（half-hidden 可选）
+fn place_ball(window: &WebviewWindow, hidden: bool) {
+    if let Some(pos) = slot(window, edge(), hidden, along()) {
         let _ = window.set_position(pos);
     }
 }
 
-/// 收起成悬浮球：恢复 74×74、重新贴边并恢复置顶
+/// 收起成悬浮球：恢复 74×74、回到停靠边并恢复置顶
 fn reset_ball(window: &WebviewWindow) {
     let _ = window.set_size(tauri::LogicalSize::new(BALL_WIN, BALL_WIN));
-    place_ball(window);
+    place_ball(window, false);
     let _ = window.set_always_on_top(true);
 }
 
-/// 把球窗就地扩到指定尺寸：窗口向左上生长，球体保持在右端原地不动。
+fn nearest_edge(r: &Rect, cx: i32, cy: i32) -> Edge {
+    let d = [
+        (Edge::Left, (cx - r.x).abs()),
+        (Edge::Right, (r.x + r.w - cx).abs()),
+        (Edge::Top, (cy - r.y).abs()),
+        (Edge::Bottom, (r.y + r.h - cy).abs()),
+    ];
+    d.into_iter()
+        .min_by_key(|(_, dist)| *dist)
+        .map(|(e, _)| e)
+        .unwrap_or(Edge::Right)
+}
+
+/// 拖动结束：按最近的边吸附，并记住这条边与沿边位置
+#[tauri::command]
+fn snap_ball(app: AppHandle) -> Result<(), String> {
+    let ball = app
+        .get_webview_window(BALL)
+        .ok_or_else(|| "球窗不存在".to_string())?;
+    let pos = ball.outer_position().map_err(|e| e.to_string())?;
+    let size = ball.inner_size().map_err(|e| e.to_string())?;
+    let r = screen_rect(&ball).ok_or_else(|| "拿不到显示器".to_string())?;
+    let e = nearest_edge(
+        &r,
+        pos.x + size.width as i32 / 2,
+        pos.y + size.height as i32 / 2,
+    );
+    let along_v = match e {
+        Edge::Left | Edge::Right => pos.y,
+        Edge::Top | Edge::Bottom => pos.x,
+    };
+    set_edge(e);
+    set_along(Some(along_v));
+    place_ball(&ball, false);
+    Ok(())
+}
+
+/// 半隐藏开关：静置时只露出一条边
+#[tauri::command]
+fn set_ball_hidden(app: AppHandle, hidden: bool) -> Result<(), String> {
+    let ball = app
+        .get_webview_window(BALL)
+        .ok_or_else(|| "球窗不存在".to_string())?;
+    place_ball(&ball, hidden);
+    Ok(())
+}
+
+/// 把球窗就地扩到指定尺寸：以停靠边为锚点向内生长，球体不挪位置。
 /// 速记条/菜单/面板都与球共用同一个 webview —— 第二个 webview 在本机会停在
 /// about:blank，变成一层看不见却挡点击的透明玻璃，所以坚持单窗口。
 fn expand_to(app: &AppHandle, w: f64, h: f64) -> Result<(), String> {
     let ball = app
         .get_webview_window(BALL)
         .ok_or_else(|| "球窗不存在".to_string())?;
-    let origin = ball_origin(&ball).ok_or_else(|| "拿不到显示器".to_string())?;
-    let scale = screen_of(&ball).map(|s| s.scale).unwrap_or(1.0);
-    let size = tauri::LogicalSize::new(w, h).to_physical::<i32>(scale);
-    let ball_size = tauri::LogicalSize::new(BALL_WIN, BALL_WIN).to_physical::<i32>(scale);
-    let x = origin.x + ball_size.width - size.width;
-    let y = origin.y - (size.height - ball_size.height) / 2;
+    let e = edge();
+    let base = slot(&ball, e, false, along()).ok_or_else(|| "拿不到显示器".to_string())?;
+    let s = scale_of(&ball);
+    let size = tauri::LogicalSize::new(w, h).to_physical::<i32>(s);
+    let span = (BALL_WIN * s).round() as i32;
+    let (x, y) = match e {
+        Edge::Right => (base.x + span - size.width, base.y - (size.height - span) / 2),
+        Edge::Left => (base.x, base.y - (size.height - span) / 2),
+        Edge::Top => (base.x - (size.width - span) / 2, base.y),
+        Edge::Bottom => (base.x - (size.width - span) / 2, base.y + span - size.height),
+    };
+    // 别让展开后的窗口跑出屏幕
+    let (x, y) = if let Some(r) = screen_rect(&ball) {
+        (
+            x.clamp(r.x, (r.x + r.w - size.width).max(r.x)),
+            y.clamp(r.y, (r.y + r.h - size.height).max(r.y)),
+        )
+    } else {
+        (x, y)
+    };
     ball.set_size(PhysicalSize::new(size.width, size.height))
-        .map_err(|e| e.to_string())?;
+        .map_err(|err| err.to_string())?;
     ball.set_position(PhysicalPosition::new(x, y))
-        .map_err(|e| e.to_string())?;
+        .map_err(|err| err.to_string())?;
     let _ = ball.show();
     let _ = ball.set_focus();
     Ok(())
@@ -98,14 +244,18 @@ fn expand_panel(app: &AppHandle, page: &str) -> Result<(), String> {
     let ball = app
         .get_webview_window(BALL)
         .ok_or_else(|| "球窗不存在".to_string())?;
-    let screen = screen_of(&ball).ok_or_else(|| "拿不到显示器".to_string())?;
-    let size = tauri::LogicalSize::new(PANEL_W, PANEL_H).to_physical::<i32>(screen.scale);
-    let x = screen.x + (screen.width - PANEL_W) / 2.0;
-    let y = screen.y + (screen.height - PANEL_H) / 2.0;
-    let pos = tauri::LogicalPosition::new(x, y).to_physical::<i32>(screen.scale);
+    let r = screen_rect(&ball).ok_or_else(|| "拿不到显示器".to_string())?;
+    let s = scale_of(&ball);
+    let (lw, lh) = monitor_of(&ball).unwrap_or((PANEL_W, PANEL_H));
+    let size = tauri::LogicalSize::new(PANEL_W, PANEL_H).to_physical::<i32>(s);
+    let pos = tauri::LogicalPosition::new((lw - PANEL_W) / 2.0, (lh - PANEL_H) / 2.0)
+        .to_physical::<i32>(s);
+    let x = r.x + (pos.x).clamp(0, (r.w - size.width).max(0));
+    let y = r.y + (pos.y).clamp(0, (r.h - size.height).max(0));
     ball.set_size(PhysicalSize::new(size.width, size.height))
-        .map_err(|e| e.to_string())?;
-    ball.set_position(pos).map_err(|e| e.to_string())?;
+        .map_err(|err| err.to_string())?;
+    ball.set_position(PhysicalPosition::new(x, y))
+        .map_err(|err| err.to_string())?;
     // 面板是主工作区，不该一直压在别的窗口上面
     let _ = ball.set_always_on_top(false);
     let _ = ball.show();
@@ -202,6 +352,8 @@ pub fn run() {
             show_ball_menu,
             collapse_ball,
             open_panel_page,
+            snap_ball,
+            set_ball_hidden,
             hide_window,
             set_autostart,
             autostart_enabled,
@@ -209,7 +361,7 @@ pub fn run() {
         ])
         .setup(|app| {
             if let Some(ball) = app.get_webview_window(BALL) {
-                place_ball(&ball);
+                reset_ball(&ball);
             }
 
             let quick = MenuItem::with_id(app, "quick", "速记…", true, None::<&str>)?;

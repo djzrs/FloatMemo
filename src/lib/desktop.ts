@@ -18,6 +18,18 @@ export async function expandQuick(): Promise<boolean> {
   return true
 }
 
+/** 拖动结束后吸附到最近的屏幕边缘 */
+export async function snapBall(): Promise<void> {
+  if (!isDesktop) return
+  await invoke('snap_ball')
+}
+
+/** 半隐藏：只露出约 10px 的一条边；false 滑回完整显示 */
+export async function setBallHidden(hidden: boolean): Promise<void> {
+  if (!isDesktop) return
+  await invoke('set_ball_hidden', { hidden })
+}
+
 /** 展开悬浮球右键菜单 */
 export async function showBallMenu(): Promise<boolean> {
   if (!isDesktop) return false
