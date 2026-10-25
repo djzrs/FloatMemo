@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "浮笺三窗口的默认权限",
   "windows": ["ball"],
-  "permissions": ["core:default", "global-shortcut:default"]
+  "permissions": ["core:default", "global-shortcut:default", "autostart:default"]
 }

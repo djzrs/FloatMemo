@@ -3,6 +3,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
 };
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
 
 const BALL: &str = "ball";
@@ -151,6 +152,23 @@ fn hide_window(window: WebviewWindow) {
     let _ = window.hide();
 }
 
+/// 开机自启开关（写 Windows 启动目录 / 注册表 Run 项）
+#[tauri::command]
+fn set_autostart(app: AppHandle, enable: bool) -> Result<(), String> {
+    let manager = app.autolaunch();
+    if enable {
+        manager.enable().map_err(|e| e.to_string())
+    } else {
+        manager.disable().map_err(|e| e.to_string())
+    }
+}
+
+/// 读取系统里真实的自启状态（用户可能在系统设置里改过）
+#[tauri::command]
+fn autostart_enabled(app: AppHandle) -> bool {
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0)
@@ -159,6 +177,10 @@ fn quit_app(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None::<Vec<&str>>,
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_shortcuts(["Ctrl+Shift+N", "Ctrl+Shift+M"])
@@ -181,6 +203,8 @@ pub fn run() {
             collapse_ball,
             open_panel_page,
             hide_window,
+            set_autostart,
+            autostart_enabled,
             quit_app
         ])
         .setup(|app| {

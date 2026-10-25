@@ -45,6 +45,19 @@ export function openPanelInBrowser(page: string): void {
   window.open(`/?win=panel${page === 'notes' ? '' : `&page=${page}`}`, '_blank', 'noopener')
 }
 
+/** 设置开机自启（写系统启动项） */
+export async function setAutoStart(enable: boolean): Promise<boolean> {
+  if (!isDesktop) return false
+  await invoke('set_autostart', { enable })
+  return true
+}
+
+/** 读取系统里真实的自启状态 */
+export async function autoStartEnabled(): Promise<boolean | null> {
+  if (!isDesktop) return null
+  return (await invoke('autostart_enabled')) as boolean
+}
+
 /** 隐藏当前窗口（面板最小化：藏起来，托盘可再唤起） */
 export async function hideWindow(): Promise<void> {
   if (!isDesktop) return

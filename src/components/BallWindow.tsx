@@ -27,6 +27,7 @@ export function BallWindow() {
   const [page, setPage] = useState<PanelPage>('notes')
   const addNote = useNotesStore((s) => s.addNote)
   const ballOpacity = useSettingsStore((s) => s.ballOpacity)
+  const minimizeToTray = useSettingsStore((s) => s.minimizeToTray)
   const patchSettings = useSettingsStore((s) => s.patch)
 
   const collapse = useCallback(async () => {
@@ -98,7 +99,11 @@ export function BallWindow() {
       <div className="grid h-full w-full place-items-center">
         <Panel
           page={page}
-          onClose={() => void collapse()}
+          onClose={() => {
+            // 关掉面板：默认收回悬浮球（进程常驻），关掉"最小化到托盘"则直接退出
+            if (minimizeToTray) void collapse()
+            else void quitApp()
+          }}
           onMinimize={() => void hideWindow().catch(() => undefined)}
         />
       </div>
