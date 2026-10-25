@@ -1,9 +1,9 @@
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BallWindow } from './components/BallWindow'
 import { Panel, type PanelPage } from './components/Panel'
 import { QuickNote } from './components/QuickNote'
-import { hideWindow, isDesktop } from './lib/desktop'
+import { hideWindow, isDesktop, takePanelPage } from './lib/desktop'
 import { DesktopDemo } from './showcase/DesktopDemo'
 import { Showcase } from './showcase/Showcase'
 import { useNotesStore } from './stores/notes'
@@ -16,16 +16,26 @@ const label = isDesktop ? getCurrentWindow().label : null
 const win = label ?? params.get('win') ?? (hash || null)
 const demo = params.get('demo')
 const rawPage = params.get('page')
-const page: PanelPage =
+const urlPage: PanelPage =
   rawPage === 'pinned' || rawPage === 'trash' || rawPage === 'settings' ? rawPage : 'notes'
 
 export default function App() {
   const addNote = useNotesStore((s) => s.addNote)
   const animations = useSettingsStore((s) => s.animations)
+  // 桌面端从托盘/球菜单打开面板时，目标页由 Rust 侧暂存，这里取走
+  const [desktopPage, setDesktopPage] = useState<PanelPage>(urlPage)
+  const page = isDesktop && win === 'panel' ? desktopPage : urlPage
 
   useEffect(() => {
     document.documentElement.dataset.motion = animations ? 'on' : 'off'
   }, [animations])
+
+  useEffect(() => {
+    if (!isDesktop || win !== 'panel') return
+    void takePanelPage().then((p) => {
+      if (p === 'pinned' || p === 'trash' || p === 'settings') setDesktopPage(p)
+    })
+  }, [])
 
   if (demo === 'desktop') return <DesktopDemo />
 

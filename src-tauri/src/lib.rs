@@ -1,7 +1,10 @@
+use std::sync::Mutex;
+
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
 };
 
 const BALL: &str = "ball";
@@ -12,6 +15,12 @@ const BALL_WIN: f64 = 74.0;
 /// 展开为速记条时的窗口尺寸（输入条 + 颜色行）
 const QUICK_W: f64 = 520.0;
 const QUICK_H: f64 = 180.0;
+/// 展开为右键菜单时的窗口尺寸（菜单 228 + 球 74 + 间距）
+const MENU_W: f64 = 320.0;
+const MENU_H: f64 = 372.0;
+
+/// 打开面板时要落到哪一页（notes/pinned/trash/settings），由面板窗取走后清空
+static PANEL_PAGE: Mutex<String> = Mutex::new(String::new());
 
 fn ensure_window(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
     if let Some(window) = app.get_webview_window(label) {
@@ -80,10 +89,9 @@ fn place_ball(window: &WebviewWindow) {
     }
 }
 
-/// 从右侧展开成速记条：窗口向左上扩到 520×180，球落在条的右端。
-/// 速记与球共用同一个 webview，避免第二窗口 about:blank / 不绘制的问题。
-#[tauri::command]
-fn expand_quick(app: AppHandle) -> Result<(), String> {
+/// 把球窗就地扩到指定尺寸：窗口向左上生长，球体保持在右端原地不动。
+/// 速记条/菜单与球共用同一个 webview，避免第二窗口 about:blank / 不绘制的问题。
+fn expand_to(app: &AppHandle, w: f64, h: f64) -> Result<(), String> {
     let ball = app
         .get_webview_window(BALL)
         .ok_or_else(|| "球窗不存在".to_string())?;
@@ -94,13 +102,12 @@ fn expand_quick(app: AppHandle) -> Result<(), String> {
         .flatten()
         .map(|m| m.scale_factor())
         .unwrap_or(1.0);
-    let quick_size = tauri::LogicalSize::new(QUICK_W, QUICK_H).to_physical::<i32>(scale);
-    // 球心：origin + 37（球 10..64 的中心）
-    let ball_center_x = origin.x + (37.0 * scale) as i32;
-    // 展开后球仍贴右：窗口左移（宽差 - 球内偏移 10），球心不动
-    let x = ball_center_x - quick_size.width + (32.0 * scale) as i32;
-    let y = origin.y - (((QUICK_H - BALL_WIN) / 2.0) * scale) as i32;
-    ball.set_size(tauri::PhysicalSize::new(quick_size.width, quick_size.height))
+    let size = tauri::LogicalSize::new(w, h).to_physical::<i32>(scale);
+    let ball_size = tauri::LogicalSize::new(BALL_WIN, BALL_WIN).to_physical::<i32>(scale);
+    // 球体在新窗口里靠右（占据 w-64..w-10），让它的屏幕位置与收起时一致
+    let x = origin.x + ball_size.width - size.width;
+    let y = origin.y - (size.height - ball_size.height) / 2;
+    ball.set_size(PhysicalSize::new(size.width, size.height))
         .map_err(|e| e.to_string())?;
     ball.set_position(PhysicalPosition::new(x, y))
         .map_err(|e| e.to_string())?;
@@ -109,9 +116,44 @@ fn expand_quick(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 展开速记条
+#[tauri::command]
+fn expand_quick(app: AppHandle) -> Result<(), String> {
+    expand_to(&app, QUICK_W, QUICK_H)
+}
+
+/// 展开悬浮球右键菜单
+#[tauri::command]
+fn show_ball_menu(app: AppHandle) -> Result<(), String> {
+    expand_to(&app, MENU_W, MENU_H)
+}
+
 #[tauri::command]
 fn open_panel(app: AppHandle) -> Result<(), String> {
     ensure_window(&app, PANEL).map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// 打开面板并直接落到指定页（notes/pinned/trash/settings）
+#[tauri::command]
+fn open_panel_page(app: AppHandle, page: String) -> Result<(), String> {
+    if let Ok(mut slot) = PANEL_PAGE.lock() {
+        *slot = page;
+    }
+    ensure_window(&app, PANEL).map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// 面板窗取走要显示的页（取走后清空）
+#[tauri::command]
+fn take_panel_page() -> String {
+    PANEL_PAGE
+        .lock()
+        .map(|mut slot| std::mem::take(&mut *slot))
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0)
 }
 
 #[tauri::command]
@@ -148,8 +190,12 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             expand_quick,
+            show_ball_menu,
             collapse_ball,
             open_panel,
+            open_panel_page,
+            take_panel_page,
+            quit_app,
             close_window,
             minimize_window,
             hide_window
@@ -161,9 +207,10 @@ pub fn run() {
 
             let quick = MenuItem::with_id(app, "quick", "速记…", true, None::<&str>)?;
             let panel = MenuItem::with_id(app, "panel", "打开便签面板", true, None::<&str>)?;
+            let settings = MenuItem::with_id(app, "settings", "设置…", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "退出浮笺", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quick, &panel, &sep, &quit])?;
+            let menu = Menu::with_items(app, &[&quick, &panel, &settings, &sep, &quit])?;
 
             TrayIconBuilder::with_id("floatmemo-tray")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -176,6 +223,9 @@ pub fn run() {
                     }
                     "panel" => {
                         let _ = ensure_window(app, PANEL);
+                    }
+                    "settings" => {
+                        let _ = open_panel_page(app.clone(), "settings".into());
                     }
                     "quit" => app.exit(0),
                     _ => {}

@@ -1,29 +1,61 @@
-import { useState } from 'react'
-import { collapseBall, expandQuick, isDesktop } from '../lib/desktop'
+import { useCallback, useEffect, useState } from 'react'
+import { useSettingsStore } from '../stores/settings'
+import {
+  collapseBall,
+  expandQuick,
+  isDesktop,
+  openPanelPage,
+  quitApp,
+  showBallMenu,
+} from '../lib/desktop'
 import { useNotesStore } from '../stores/notes'
 import { Ball } from './Ball'
+import { BallMenu } from './BallMenu'
 import { QuickNote } from './QuickNote'
 
-type Mode = 'ball' | 'quick'
+type Mode = 'ball' | 'quick' | 'menu'
 
-/** 桌面悬浮球窗口：点击球就地展开速记条，保存/Esc 收回。与速记共用同一 webview。 */
+/** 桌面悬浮球窗口：单击展开速记，右键展开菜单。三种形态共用同一个 webview。 */
 export function BallWindow() {
   const [hover, setHover] = useState(false)
   const [mode, setMode] = useState<Mode>('ball')
   const addNote = useNotesStore((s) => s.addNote)
+  const ballOpacity = useSettingsStore((s) => s.ballOpacity)
+  const patchSettings = useSettingsStore((s) => s.patch)
 
-  async function openQuick() {
+  const collapse = useCallback(async () => {
+    setMode('ball')
+    if (isDesktop) await collapseBall().catch(() => undefined)
+  }, [])
+
+  const openQuick = useCallback(async () => {
     if (isDesktop) {
       const ok = await expandQuick().catch(() => false)
       if (!ok) return
     }
     setMode('quick')
-  }
+  }, [])
 
-  async function closeQuick() {
-    setMode('ball')
-    if (isDesktop) await collapseBall().catch(() => undefined)
-  }
+  const openMenu = useCallback(async () => {
+    if (isDesktop) {
+      const ok = await showBallMenu().catch(() => false)
+      if (!ok) return
+    }
+    setMode('menu')
+  }, [])
+
+  // Esc 收起
+  useEffect(() => {
+    if (mode === 'ball') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') void collapse()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode, collapse])
+
+  const level = ballOpacity
+  const ballState = mode === 'menu' ? 'menu' : hover ? 'hover' : 'idle'
 
   if (mode === 'quick') {
     return (
@@ -32,10 +64,46 @@ export function BallWindow() {
           autoFocus
           onSave={(draft) => {
             addNote({ title: '', content: draft.content, color: draft.color })
-            void closeQuick()
+            void collapse()
           }}
-          onCancel={() => void closeQuick()}
+          onCancel={() => void collapse()}
         />
+      </div>
+    )
+  }
+
+  if (mode === 'menu') {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-end gap-1 pr-2.5"
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <BallMenu
+          level={level}
+          onLevelChange={(v) => patchSettings({ ballOpacity: v })}
+          onNewNote={() => void openQuick()}
+          onOpenPanel={() => {
+            void openPanelPage('notes')
+            void collapse()
+          }}
+          onSettings={() => {
+            void openPanelPage('settings')
+            void collapse()
+          }}
+          onQuit={() => void quitApp()}
+        />
+        <button
+          type="button"
+          aria-label="收起菜单"
+          onClick={() => void collapse()}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            void collapse()
+          }}
+          className="block cursor-pointer"
+        >
+          <Ball state="menu" level={level} />
+        </button>
       </div>
     )
   }
@@ -45,14 +113,18 @@ export function BallWindow() {
       className="flex h-full w-full items-center justify-start"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        void openMenu()
+      }}
     >
       <button
         type="button"
-        aria-label="浮笺悬浮球：单击速记"
+        aria-label="浮笺悬浮球：单击速记，右键菜单"
         onClick={() => void openQuick()}
         className="block cursor-pointer"
       >
-        <Ball state={hover ? 'hover' : 'idle'} />
+        <Ball state={ballState} level={level} />
       </button>
     </div>
   )
