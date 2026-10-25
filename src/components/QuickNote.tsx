@@ -52,7 +52,7 @@ export function QuickNote({
 
   return (
     <div
-      className="w-[520px] overflow-hidden rounded-[18px] border border-white/85 bg-[#fdfefe]/95 backdrop-blur-2xl"
+      className="w-[520px] overflow-hidden rounded-[18px] border border-white/85 bg-[#fdfefe]/95"
       style={{
         boxShadow:
           '0 32px 64px -24px rgba(6,29,29,0.55), 0 8px 18px -8px rgba(6,29,29,0.25), 0 0 0 1px rgba(6,29,29,0.04)',
@@ -73,7 +73,7 @@ export function QuickNote({
       />
 
       {/* 拖动区 */}
-      <div className="flex items-center gap-2 px-4 pt-3">
+      <div data-tauri-drag-region className="flex items-center gap-2 px-4 pt-3">
         <div className="flex h-4 w-4 items-center justify-center">
           <Logomark className="h-4 w-4" />
         </div>

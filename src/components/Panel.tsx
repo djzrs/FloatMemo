@@ -11,7 +11,6 @@ import {
   Search,
   SearchX,
   Settings,
-  Square,
   Tags,
   Trash2,
   X,
@@ -21,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
+import { closeWindow, minimizeWindow } from '../lib/desktop'
 import { useNotesStore } from '../stores/notes'
 import { DENSITY_STYLES, useSettingsStore } from '../stores/settings'
 import { Logomark } from './Logomark'
@@ -351,7 +351,10 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
 
       {/* 主区域 */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[54px] shrink-0 items-center gap-3 border-b border-line/90 bg-white/70 px-5 backdrop-blur">
+        <header
+          data-tauri-drag-region
+          className="flex h-[54px] shrink-0 items-center gap-3 border-b border-line/90 bg-white/70 px-5 backdrop-blur"
+        >
           <div className="relative w-[262px]">
             <Search
               size={14}
@@ -430,20 +433,15 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
               <button
                 type="button"
                 aria-label="最小化"
+                onClick={() => void minimizeWindow()}
                 className="grid h-[28px] w-[30px] place-items-center rounded-[6px] text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
               >
                 <Minus size={14} strokeWidth={2} />
               </button>
               <button
                 type="button"
-                aria-label="最大化"
-                className="grid h-[28px] w-[30px] place-items-center rounded-[6px] text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
-              >
-                <Square size={11} strokeWidth={1.8} />
-              </button>
-              <button
-                type="button"
                 aria-label="关闭"
+                onClick={() => void closeWindow()}
                 className="grid h-[28px] w-[30px] place-items-center rounded-[6px] text-ink-400 transition-colors hover:bg-[#E81123] hover:text-white"
               >
                 <X size={14} strokeWidth={2} />

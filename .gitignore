@@ -6,8 +6,9 @@ dist/
 dist-ssr/
 *.tsbuildinfo
 
-# Tauri（后续阶段）
+# Tauri
 src-tauri/target/
+src-tauri/gen/
 
 # 编辑器 / 系统
 .vscode/*
