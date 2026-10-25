@@ -205,7 +205,7 @@ export function Showcase() {
           <div className="min-w-0">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10.5px] text-white/55">
               <span className="h-[5px] w-[5px] rounded-full bg-brand-400" />
-              界面设计稿 · 仅视觉与静态状态，无业务逻辑
+              界面设计稿 · 已接入本地存储，可新建 / 编辑 / 回收站还原
             </div>
             <h1 className="mt-5 text-[44px] leading-[1.08] font-semibold tracking-[-0.02em]">
               浮笺
@@ -386,7 +386,7 @@ export function Showcase() {
             <div className="flex justify-center">
               <QuickNote
                 color="sky"
-                value={
+                initialValue={
                   '把「失焦 1.5s 收起」改成「失焦 150ms 后判断焦点」\n否则拖到第二个屏幕时会误收。'
                 }
               />
@@ -569,7 +569,7 @@ export function Showcase() {
           <div>
             <div className="text-[11px] text-white/45">界面稿 v0.1 · 2026-10-25</div>
             <p className="mt-1 text-[10px] text-white/25">
-              下一步：确认视觉方向 → 接入 Tauri 三窗口骨架 → 悬浮球拖拽与吸附逻辑
+              下一步：Tauri 三窗口骨架 → 悬浮球拖拽与吸附 → SQLite 替换 localStorage
             </p>
           </div>
           <div className="flex items-center gap-2">
