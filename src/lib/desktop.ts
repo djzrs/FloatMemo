@@ -18,6 +18,24 @@ export async function expandQuick(): Promise<boolean> {
   return true
 }
 
+/** 拖动中：按鼠标位移移动球窗（dx/dy 单位为 CSS 像素） */
+export async function moveBallBy(dx: number, dy: number): Promise<void> {
+  if (!isDesktop) return
+  await invoke('move_ball_by', { dx, dy })
+}
+
+/** 拖动结束后吸附到最近的屏幕边缘 */
+export async function snapBall(): Promise<void> {
+  if (!isDesktop) return
+  await invoke('snap_ball')
+}
+
+/** 半隐藏：只露出约 10px 的一条边；false 滑回完整显示 */
+export async function setBallHidden(hidden: boolean): Promise<void> {
+  if (!isDesktop) return
+  await invoke('set_ball_hidden', { hidden })
+}
+
 /** 展开悬浮球右键菜单 */
 export async function showBallMenu(): Promise<boolean> {
   if (!isDesktop) return false
@@ -43,6 +61,19 @@ export async function openPanelPage(page: string): Promise<boolean> {
 export function openPanelInBrowser(page: string): void {
   if (isDesktop) return
   window.open(`/?win=panel${page === 'notes' ? '' : `&page=${page}`}`, '_blank', 'noopener')
+}
+
+/** 设置开机自启（写系统启动项） */
+export async function setAutoStart(enable: boolean): Promise<boolean> {
+  if (!isDesktop) return false
+  await invoke('set_autostart', { enable })
+  return true
+}
+
+/** 读取系统里真实的自启状态 */
+export async function autoStartEnabled(): Promise<boolean | null> {
+  if (!isDesktop) return null
+  return (await invoke('autostart_enabled')) as boolean
 }
 
 /** 隐藏当前窗口（面板最小化：藏起来，托盘可再唤起） */

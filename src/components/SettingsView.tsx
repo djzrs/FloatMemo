@@ -14,6 +14,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { COLOR_ORDER, NOTE_COLORS } from '../data/colors'
 import { exportJson, exportMarkdown, parseBackup } from '../lib/backup'
+import { autoStartEnabled, isDesktop, setAutoStart } from '../lib/desktop'
 import { useNotesStore } from '../stores/notes'
 import { useSettingsStore, type CardDensity, type PanelView } from '../stores/settings'
 import { Ball } from './Ball'
@@ -164,6 +165,17 @@ export function SettingsView() {
 
   useEffect(() => () => window.clearTimeout(statusTimer.current), [])
 
+  // 桌面端：进入设置时对齐系统里真实的自启状态（用户可能在系统设置里改过）
+  useEffect(() => {
+    void autoStartEnabled().then((real) => {
+      if (real !== null && real !== settings.autoStart) {
+        settings.patch({ autoStart: real })
+      }
+    })
+    // 只在挂载时对齐一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const flash = (ok: boolean, text: string) => {
     setStatus({ ok, text })
     window.clearTimeout(statusTimer.current)
@@ -234,7 +246,17 @@ export function SettingsView() {
                   <Row title="开机自启" desc="登录 Windows 后自动启动浮笺">
                     <Toggle
                       on={settings.autoStart}
-                      onChange={() => settings.patch({ autoStart: !settings.autoStart })}
+                      onChange={() => {
+                        const next = !settings.autoStart
+                        settings.patch({ autoStart: next })
+                        if (!isDesktop) return
+                        void setAutoStart(next).then((ok) => {
+                          if (ok) return
+                          // 写系统启动项失败：回滚开关并提示
+                          settings.patch({ autoStart: !next })
+                          flash(false, '开机自启设置失败，请检查系统权限')
+                        })
+                      }}
                     />
                   </Row>
                   <Row title="关闭面板时最小化到托盘" desc="进程常驻，悬浮球与快捷键继续可用">
