@@ -52,6 +52,22 @@ fn ensure_window(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
         .build(),
         _ => unreachable!("未知窗口: {label}"),
     }
+    .map(|window| {
+        // 运行时新建的 webview 可能停在 about:blank，这里对齐球窗已加载的地址
+        sync_url(app, &window);
+        window
+    })
+}
+
+/// 把窗口导航到球窗当前地址（开发/生产都适用）
+fn sync_url(app: &AppHandle, window: &WebviewWindow) {
+    if let Some(ball) = app.get_webview_window(BALL) {
+        if let Ok(url) = ball.url() {
+            if url.scheme() != "about" {
+                let _ = window.navigate(url);
+            }
+        }
+    }
 }
 
 /// 把悬浮球放到主屏右侧、垂直居中。
@@ -107,6 +123,9 @@ pub fn run() {
         .setup(|app| {
             if let Some(ball) = app.get_webview_window(BALL) {
                 place_ball(&ball);
+                if let Some(quick) = app.get_webview_window(QUICK) {
+                    sync_url(app.handle(), &quick);
+                }
             }
 
             let quick = MenuItem::with_id(app, "quick", "速记…", true, None::<&str>)?;
