@@ -46,7 +46,6 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc
-          bundlePath: target/x86_64-pc-windows-msvc/release/bundle
 
       - name: 上传免安装版到 Release
         shell: pwsh

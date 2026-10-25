@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "desktop": "tauri dev",
+    "tauri": "tauri",
     "desktop:build": "tauri build"
   },
   "dependencies": {
