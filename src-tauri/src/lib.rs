@@ -13,6 +13,10 @@ const BALL: &str = "ball";
 
 /// 悬浮球窗口边长（球体 54 + 阴影留白）
 const BALL_WIN: f64 = 74.0;
+/// 球体半径（54 / 2）
+const BALL_RADIUS: f64 = 27.0;
+/// 圆形裁剪在球体之外额外留出的余量（容纳光晕与投影）
+const REGION_PAD: f64 = 13.0;
 /// 展开为速记条时的窗口尺寸（输入条 + 颜色行）
 const QUICK_W: f64 = 520.0;
 const QUICK_H: f64 = 180.0;
@@ -174,7 +178,45 @@ fn reset_ball(window: &WebviewWindow) {
     let _ = window.set_size(tauri::LogicalSize::new(BALL_WIN, BALL_WIN));
     place_ball(window, false);
     let _ = window.set_always_on_top(true);
+    set_ball_region(window);
 }
+
+/// 把球窗裁成圆形：只有球周围一圈可见可点，
+/// 方形透明区域（含被 Windows 强制撑出的 136px 宽度）不再挡住下面的窗口。
+#[cfg(windows)]
+fn set_ball_region(window: &WebviewWindow) {
+    use windows::Win32::Graphics::Gdi::{CreateEllipticRgn, SetWindowRgn};
+
+    if let Ok(hwnd) = window.hwnd() {
+        let s = scale_of(window);
+        let px = |v: f64| (v * s).round() as i32;
+        // 球心在窗口内 37 逻辑（球体 10..64），半径 = 球 27 + 13 的光晕/投影余量
+        let c = px(BALL_WIN / 2.0);
+        let r = px(BALL_RADIUS + REGION_PAD);
+        unsafe {
+            let rgn = CreateEllipticRgn(c - r, c - r, c + r, c + r);
+            let _ = SetWindowRgn(hwnd, Some(rgn), true);
+        }
+    }
+}
+
+/// 展开成速记/菜单/面板时取消裁剪，恢复矩形窗口
+#[cfg(windows)]
+fn clear_window_region(window: &WebviewWindow) {
+    use windows::Win32::Graphics::Gdi::SetWindowRgn;
+
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            let _ = SetWindowRgn(hwnd, None, true);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn set_ball_region(_window: &WebviewWindow) {}
+
+#[cfg(not(windows))]
+fn clear_window_region(_window: &WebviewWindow) {}
 
 fn nearest_edge(r: &Rect, cx: i32, cy: i32) -> Edge {
     let d = [
@@ -278,6 +320,7 @@ fn expand_to(app: &AppHandle, w: f64, h: f64) -> Result<(), String> {
         .map_err(|err| err.to_string())?;
     ball.set_position(PhysicalPosition::new(x, y))
         .map_err(|err| err.to_string())?;
+    clear_window_region(&ball);
     let _ = ball.show();
     let _ = ball.set_focus();
     Ok(())
@@ -302,6 +345,7 @@ fn expand_panel(app: &AppHandle, page: &str) -> Result<(), String> {
         .map_err(|err| err.to_string())?;
     // 面板是主工作区，不该一直压在别的窗口上面
     let _ = ball.set_always_on_top(false);
+    clear_window_region(&ball);
     let _ = ball.show();
     let _ = ball.set_focus();
     let _ = app.emit("floatmemo://panel", page.to_string());
