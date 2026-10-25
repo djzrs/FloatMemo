@@ -11,7 +11,8 @@ import { useSettingsStore } from './stores/settings'
 
 const params = new URLSearchParams(window.location.search)
 const hash = window.location.hash.replace(/^#\/?/, '')
-// 桌面端直接按窗口 label 决定渲染哪个界面；浏览器预览用 query/hash
+// 桌面端只有一个窗口（球窗）：速记/菜单/面板都是它就地放大的形态，由 BallWindow 自己切换。
+// 浏览器预览用 query/hash 路由。
 const label = isDesktop ? getCurrentWindow().label : null
 const win = label ?? params.get('win') ?? (hash || null)
 const demo = params.get('demo')

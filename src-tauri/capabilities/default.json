@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "浮笺三窗口的默认权限",
-  "windows": ["ball", "panel"],
-  "permissions": ["core:default"]
+  "windows": ["ball"],
+  "permissions": ["core:default", "global-shortcut:default"]
 }

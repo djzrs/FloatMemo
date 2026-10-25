@@ -1,28 +1,108 @@
-import { useState } from 'react'
-import { collapseBall, expandQuick, isDesktop } from '../lib/desktop'
+import { listen } from '@tauri-apps/api/event'
+import { useCallback, useEffect, useState } from 'react'
+import type { PanelPage } from './Panel'
+import { useSettingsStore } from '../stores/settings'
+import {
+  collapseBall,
+  expandQuick,
+  hideWindow,
+  isDesktop,
+  openPanelInBrowser,
+  openPanelPage,
+  quitApp,
+  showBallMenu,
+} from '../lib/desktop'
 import { useNotesStore } from '../stores/notes'
 import { Ball } from './Ball'
+import { BallMenu } from './BallMenu'
+import { Panel } from './Panel'
 import { QuickNote } from './QuickNote'
 
-type Mode = 'ball' | 'quick'
+type Mode = 'ball' | 'quick' | 'menu' | 'panel'
 
-/** 桌面悬浮球窗口：点击球就地展开速记条，保存/Esc 收回。与速记共用同一 webview。 */
+/** 桌面悬浮球窗口：单击速记、右键菜单、放大便签面板。四种形态共用同一个 webview。 */
 export function BallWindow() {
   const [hover, setHover] = useState(false)
   const [mode, setMode] = useState<Mode>('ball')
+  const [page, setPage] = useState<PanelPage>('notes')
   const addNote = useNotesStore((s) => s.addNote)
+  const ballOpacity = useSettingsStore((s) => s.ballOpacity)
+  const patchSettings = useSettingsStore((s) => s.patch)
 
-  async function openQuick() {
+  const collapse = useCallback(async () => {
+    setMode('ball')
+    if (isDesktop) await collapseBall().catch(() => undefined)
+  }, [])
+
+  const openQuick = useCallback(async () => {
     if (isDesktop) {
       const ok = await expandQuick().catch(() => false)
       if (!ok) return
     }
     setMode('quick')
-  }
+  }, [])
 
-  async function closeQuick() {
-    setMode('ball')
-    if (isDesktop) await collapseBall().catch(() => undefined)
+  const openMenu = useCallback(async () => {
+    if (isDesktop) {
+      const ok = await showBallMenu().catch(() => false)
+      if (!ok) return
+    }
+    setMode('menu')
+  }, [])
+
+  const openPanel = useCallback(
+    (target: PanelPage) => {
+      if (!isDesktop) {
+        openPanelInBrowser(target)
+        return
+      }
+      void openPanelPage(target).catch(() => undefined)
+    },
+    [],
+  )
+
+  // Rust 侧（全局快捷键 / 托盘）通知的形态切换
+  useEffect(() => {
+    if (!isDesktop) return
+    const cleanups: Array<() => void> = []
+    const bind = async () => {
+      cleanups.push(await listen('floatmemo://quick', () => setMode('quick')))
+      cleanups.push(
+        await listen<string>('floatmemo://panel', (e) => {
+          const p = e.payload
+          setPage(p === 'pinned' || p === 'trash' || p === 'settings' ? p : 'notes')
+          setMode('panel')
+        }),
+      )
+      cleanups.push(await listen('floatmemo://ball', () => setMode('ball')))
+    }
+    void bind()
+    return () => cleanups.forEach((fn) => fn())
+  }, [])
+
+  // Esc 收起（面板不响应，避免编辑中断）
+  useEffect(() => {
+    if (mode === 'ball' || mode === 'panel') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') void collapse()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode, collapse])
+
+  const level = ballOpacity
+  const ballState = mode === 'menu' ? 'menu' : hover ? 'hover' : 'idle'
+
+  if (mode === 'panel') {
+    return (
+      <div className="grid h-full w-full place-items-center">
+        <Panel
+          page={page}
+          onClose={() => void collapse()}
+          onMinimize={() => void hideWindow().catch(() => undefined)}
+        />
+      </div>
+    )
   }
 
   if (mode === 'quick') {
@@ -32,10 +112,40 @@ export function BallWindow() {
           autoFocus
           onSave={(draft) => {
             addNote({ title: '', content: draft.content, color: draft.color })
-            void closeQuick()
+            void collapse()
           }}
-          onCancel={() => void closeQuick()}
+          onCancel={() => void collapse()}
         />
+      </div>
+    )
+  }
+
+  if (mode === 'menu') {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-end gap-1 pr-2.5"
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <BallMenu
+          level={level}
+          onLevelChange={(v) => patchSettings({ ballOpacity: v })}
+          onNewNote={() => void openQuick()}
+          onOpenPanel={() => openPanel('notes')}
+          onSettings={() => openPanel('settings')}
+          onQuit={() => void quitApp()}
+        />
+        <button
+          type="button"
+          aria-label="收起菜单"
+          onClick={() => void collapse()}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            void collapse()
+          }}
+          className="block cursor-pointer"
+        >
+          <Ball state="menu" level={level} />
+        </button>
       </div>
     )
   }
@@ -45,14 +155,18 @@ export function BallWindow() {
       className="flex h-full w-full items-center justify-start"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        void openMenu()
+      }}
     >
       <button
         type="button"
-        aria-label="浮笺悬浮球：单击速记"
+        aria-label="浮笺悬浮球：单击速记，右键菜单"
         onClick={() => void openQuick()}
         className="block cursor-pointer"
       >
-        <Ball state={hover ? 'hover' : 'idle'} />
+        <Ball state={ballState} level={level} />
       </button>
     </div>
   )
