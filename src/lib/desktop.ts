@@ -24,16 +24,16 @@ export async function moveBallBy(dx: number, dy: number): Promise<void> {
   await invoke('move_ball_by', { dx, dy })
 }
 
-/** 拖动结束后吸附到最近的屏幕边缘 */
-export async function snapBall(): Promise<void> {
+/** 拖动结束：靠近边缘才吸附（enabled=false 时停在松手位置） */
+export async function snapBall(enabled: boolean): Promise<void> {
   if (!isDesktop) return
-  await invoke('snap_ball')
+  await invoke('snap_ball', { enabled })
 }
 
-/** 半隐藏：只露出约 10px 的一条边；false 滑回完整显示 */
-export async function setBallHidden(hidden: boolean): Promise<void> {
-  if (!isDesktop) return
-  await invoke('set_ball_hidden', { hidden })
+/** 半隐藏：只露 6px；返回是否生效（自由位置无处可藏则返回 false） */
+export async function setBallHidden(hidden: boolean): Promise<boolean> {
+  if (!isDesktop) return false
+  return (await invoke('set_ball_hidden', { hidden })) as boolean
 }
 
 /** 展开悬浮球右键菜单 */

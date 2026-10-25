@@ -17,6 +17,8 @@ const BALL_WIN: f64 = 74.0;
 const BALL_RADIUS: f64 = 27.0;
 /// 圆形裁剪在球体之外额外留出的余量（容纳光晕与投影）
 const REGION_PAD: f64 = 13.0;
+/// 磁吸感应距离：球心离边缘多近才吸附（否则停在原地）
+const SNAP_ZONE: f64 = 56.0;
 /// 展开为速记条时的窗口尺寸（输入条 + 颜色行）
 const QUICK_W: f64 = 520.0;
 const QUICK_H: f64 = 180.0;
@@ -55,10 +57,14 @@ enum Edge {
     Bottom,
 }
 
-/// 当前停靠边：拖动吸附后记住，展开/收起都以它为基准
+/// 最近的边：决定半隐藏方向与展开方向
 static EDGE: Mutex<Edge> = Mutex::new(Edge::Right);
 /// 沿边方向的坐标（上下边记 x，左右边记 y）
 static ALONG: Mutex<Option<i32>> = Mutex::new(None);
+/// 是否吸附在边上；false = 停在屏幕任意位置
+static DOCKED: Mutex<bool> = Mutex::new(true);
+/// 未吸附时的自由位置
+static POS: Mutex<Option<PhysicalPosition<i32>>> = Mutex::new(None);
 
 fn edge() -> Edge {
     EDGE.lock().map(|g| *g).unwrap_or(Edge::Right)
@@ -76,6 +82,26 @@ fn along() -> Option<i32> {
 
 fn set_along(v: Option<i32>) {
     if let Ok(mut g) = ALONG.lock() {
+        *g = v
+    }
+}
+
+fn docked() -> bool {
+    DOCKED.lock().map(|g| *g).unwrap_or(true)
+}
+
+fn set_docked(v: bool) {
+    if let Ok(mut g) = DOCKED.lock() {
+        *g = v
+    }
+}
+
+fn free_pos() -> Option<PhysicalPosition<i32>> {
+    POS.lock().ok().and_then(|g| *g)
+}
+
+fn set_free_pos(v: Option<PhysicalPosition<i32>>) {
+    if let Ok(mut g) = POS.lock() {
         *g = v
     }
 }
@@ -166,10 +192,16 @@ fn slot(window: &WebviewWindow, e: Edge, hidden: bool, along: Option<i32>) -> Op
     Some(PhysicalPosition::new(x, y))
 }
 
-/// 把球窗摆到当前停靠边（half-hidden 可选）
+/// 把球窗摆好：吸附态按边计算，自由态停在原处（自由位置没有边可藏）
 fn place_ball(window: &WebviewWindow, hidden: bool) {
-    if let Some(pos) = slot(window, edge(), hidden, along()) {
-        let _ = window.set_position(pos);
+    if docked() {
+        if let Some(pos) = slot(window, edge(), hidden, along()) {
+            let _ = window.set_position(pos);
+        }
+    } else if let Some(pos) = free_pos() {
+        if !hidden {
+            let _ = window.set_position(pos);
+        }
     }
 }
 
@@ -255,38 +287,59 @@ fn move_ball_by(app: AppHandle, dx: f64, dy: f64) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// 拖动结束：按最近的边吸附，并记住这条边与沿边位置
+fn edge_distance(e: Edge, r: &Rect, cx: i32, cy: i32) -> i32 {
+    match e {
+        Edge::Left => cx - r.x,
+        Edge::Right => r.x + r.w - cx,
+        Edge::Top => cy - r.y,
+        Edge::Bottom => r.y + r.h - cy,
+    }
+}
+
+/// 拖动结束：靠近边缘才吸附（磁吸），否则停在松手的位置。
+/// enabled=false 时完全不吸附，球可以停在屏幕任意位置。
 #[tauri::command]
-fn snap_ball(app: AppHandle) -> Result<(), String> {
+fn snap_ball(app: AppHandle, enabled: bool) -> Result<(), String> {
     let ball = app
         .get_webview_window(BALL)
         .ok_or_else(|| "球窗不存在".to_string())?;
     let pos = ball.outer_position().map_err(|e| e.to_string())?;
-    let size = ball.inner_size().map_err(|e| e.to_string())?;
     let r = screen_rect(&ball).ok_or_else(|| "拿不到显示器".to_string())?;
-    let e = nearest_edge(
-        &r,
-        pos.x + size.width as i32 / 2,
-        pos.y + size.height as i32 / 2,
-    );
+    let s = scale_of(&ball);
+    let half = (BALL_WIN / 2.0 * s).round() as i32;
+    let cx = pos.x + half;
+    let cy = pos.y + half;
+    let e = nearest_edge(&r, cx, cy);
     let along_v = match e {
         Edge::Left | Edge::Right => pos.y,
         Edge::Top | Edge::Bottom => pos.x,
     };
     set_edge(e);
-    set_along(Some(along_v));
-    place_ball(&ball, false);
+    let near = edge_distance(e, &r, cx, cy) <= (SNAP_ZONE * s).round() as i32;
+    if enabled && near {
+        set_docked(true);
+        set_along(Some(along_v));
+        set_free_pos(None);
+        place_ball(&ball, false);
+    } else {
+        set_docked(false);
+        set_free_pos(Some(pos));
+        let _ = ball.set_position(pos);
+    }
     Ok(())
 }
 
-/// 半隐藏开关：静置时只露出一条边
+/// 半隐藏开关：静置时只露出一条边。返回是否真的生效（自由位置无处可藏）
 #[tauri::command]
-fn set_ball_hidden(app: AppHandle, hidden: bool) -> Result<(), String> {
+fn set_ball_hidden(app: AppHandle, hidden: bool) -> Result<bool, String> {
     let ball = app
         .get_webview_window(BALL)
         .ok_or_else(|| "球窗不存在".to_string())?;
+    if !docked() {
+        return Ok(false)
+    }
     place_ball(&ball, hidden);
-    Ok(())
+    Ok(true)
 }
 
 /// 把球窗就地扩到指定尺寸：以停靠边为锚点向内生长，球体不挪位置。
@@ -297,7 +350,12 @@ fn expand_to(app: &AppHandle, w: f64, h: f64) -> Result<(), String> {
         .get_webview_window(BALL)
         .ok_or_else(|| "球窗不存在".to_string())?;
     let e = edge();
-    let base = slot(&ball, e, false, along()).ok_or_else(|| "拿不到显示器".to_string())?;
+    let base = if docked() {
+        slot(&ball, e, false, along())
+    } else {
+        free_pos()
+    }
+    .ok_or_else(|| "拿不到显示器".to_string())?;
     let s = scale_of(&ball);
     let size = tauri::LogicalSize::new(w, h).to_physical::<i32>(s);
     let span = (BALL_WIN * s).round() as i32;
