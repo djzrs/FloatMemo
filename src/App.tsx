@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { Ball } from './components/Ball'
 import { Panel, type PanelPage } from './components/Panel'
 import { QuickNote } from './components/QuickNote'
 import { DesktopDemo } from './showcase/DesktopDemo'
 import { Showcase } from './showcase/Showcase'
 import { useNotesStore } from './stores/notes'
+import { useSettingsStore } from './stores/settings'
 
 const params = new URLSearchParams(window.location.search)
 const win = params.get('win')
@@ -14,6 +16,11 @@ const page: PanelPage =
 
 export default function App() {
   const addNote = useNotesStore((s) => s.addNote)
+  const animations = useSettingsStore((s) => s.animations)
+
+  useEffect(() => {
+    document.documentElement.dataset.motion = animations ? 'on' : 'off'
+  }, [animations])
 
   if (demo === 'desktop') return <DesktopDemo />
 

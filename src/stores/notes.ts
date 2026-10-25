@@ -32,6 +32,8 @@ type NotesState = {
   restoreNote: (id: string) => void
   deleteForever: (id: string) => void
   clearTrash: () => void
+  /** 导入：按 id 去重，返回实际新增条数 */
+  importNotes: (incoming: Note[]) => number
 }
 
 const TITLE_MAX = 24
@@ -128,6 +130,18 @@ export const useNotesStore = create<NotesState>()(
 
       clearTrash: () => {
         set({ notes: get().notes.filter((note) => !note.archived) })
+      },
+
+      importNotes: (incoming) => {
+        const existing = new Set(get().notes.map((note) => note.id))
+        const fresh: Note[] = []
+        incoming.forEach((note) => {
+          if (existing.has(note.id)) return
+          existing.add(note.id)
+          fresh.push(note)
+        })
+        if (fresh.length) set({ notes: [...fresh, ...get().notes] })
+        return fresh.length
       },
     }),
     {

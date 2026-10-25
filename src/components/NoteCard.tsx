@@ -2,6 +2,7 @@ import { Pin } from 'lucide-react'
 import { NOTE_COLORS } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
+import { DENSITY_STYLES, useSettingsStore } from '../stores/settings'
 import { NoteMenu } from './NoteMenu'
 
 type Props = {
@@ -13,6 +14,8 @@ type Props = {
 
 export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
   const c = NOTE_COLORS[note.color]
+  const density = useSettingsStore((s) => s.cardDensity)
+  const d = DENSITY_STYLES[density]
 
   return (
     <article
@@ -27,7 +30,7 @@ export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
     >
       <div className="flex items-start gap-1">
         <h3
-          className="min-w-0 flex-1 text-[13.5px] leading-[20px] font-semibold tracking-[0.01em]"
+          className={`min-w-0 flex-1 font-semibold tracking-[0.01em] ${d.title}`}
           style={{ color: c.ink }}
         >
           {note.title}
@@ -60,10 +63,7 @@ export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
         </div>
       </div>
 
-      <p
-        className="mt-1.5 line-clamp-4 text-[12px] leading-[1.68] whitespace-pre-line"
-        style={{ color: c.sub, opacity: 0.92 }}
-      >
+      <p className={`mt-1.5 whitespace-pre-line ${d.body}`} style={{ color: c.sub, opacity: 0.92 }}>
         {note.content}
       </p>
 

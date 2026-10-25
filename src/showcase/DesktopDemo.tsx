@@ -6,6 +6,7 @@ import { Logomark } from '../components/Logomark'
 import { QuickNote } from '../components/QuickNote'
 import type { NoteColorKey } from '../data/colors'
 import { useNotesStore } from '../stores/notes'
+import { useSettingsStore } from '../stores/settings'
 
 /**
  * 浏览器里的桌面演示：悬浮球贴右边缘半隐藏，悬停滑出，单击展开速记条。
@@ -13,11 +14,13 @@ import { useNotesStore } from '../stores/notes'
  */
 export function DesktopDemo() {
   const addNote = useNotesStore((s) => s.addNote)
+  const level = useSettingsStore((s) => s.ballOpacity)
+  const halfHidden = useSettingsStore((s) => s.halfHidden)
+  const patchSettings = useSettingsStore((s) => s.patch)
 
   const [open, setOpen] = useState(false)
   const [menu, setMenu] = useState(false)
   const [hover, setHover] = useState(false)
-  const [level, setLevel] = useState<0 | 1 | 2>(0)
   const [justSaved, setJustSaved] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -77,7 +80,7 @@ export function DesktopDemo() {
     showToast('已保存 · 可在便签面板中查看')
   }
 
-  const ballOffset = hover || open || menu ? 0 : 58
+  const ballOffset = !halfHidden || hover || open || menu ? 0 : 58
 
   return (
     <div className="desktop-wallpaper relative h-full w-full overflow-clip">
@@ -168,7 +171,7 @@ export function DesktopDemo() {
         <div ref={menuRef} className="absolute top-1/2 right-[86px] z-30 -translate-y-1/2">
           <BallMenu
             level={level}
-            onLevelChange={setLevel}
+            onLevelChange={(v) => patchSettings({ ballOpacity: v })}
             onNewNote={() => {
               setMenu(false)
               setOpen(true)
