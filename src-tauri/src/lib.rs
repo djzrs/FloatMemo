@@ -3,9 +3,10 @@ use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
+use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
 
 const BALL: &str = "ball";
 const PANEL: &str = "panel";
@@ -188,6 +189,25 @@ fn reset_ball(window: &WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcuts(["Ctrl+Shift+N", "Ctrl+Shift+M"])
+                .expect("注册全局快捷键失败")
+                .with_handler(|app, shortcut, event| {
+                    if event.state() != ShortcutState::Pressed {
+                        return
+                    }
+                    if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyN) {
+                        // 速记：展开球窗并让前端切到输入态
+                        if expand_quick(app.clone()).is_ok() {
+                            let _ = app.emit("floatmemo://quick", ());
+                        }
+                    } else if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyM) {
+                        let _ = ensure_window(app, PANEL);
+                    }
+                })
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             expand_quick,
             show_ball_menu,

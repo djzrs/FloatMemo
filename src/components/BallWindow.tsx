@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event'
 import { useCallback, useEffect, useState } from 'react'
 import { useSettingsStore } from '../stores/settings'
 import {
@@ -42,6 +43,16 @@ export function BallWindow() {
       if (!ok) return
     }
     setMode('menu')
+  }, [])
+
+  // 全局快捷键 Ctrl+Shift+N：Rust 侧展开窗口后通知前端切到速记态
+  useEffect(() => {
+    if (!isDesktop) return
+    let unlisten: (() => void) | undefined
+    void listen('floatmemo://quick', () => setMode('quick')).then((fn) => {
+      unlisten = fn
+    })
+    return () => unlisten?.()
   }, [])
 
   // Esc 收起
