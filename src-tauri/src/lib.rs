@@ -6,6 +6,7 @@ use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
 };
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_sql::{Migration, MigrationKind};
 use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
 
 const BALL: &str = "ball";
@@ -21,6 +22,25 @@ const MENU_H: f64 = 372.0;
 /// 展开为便签面板时的窗口尺寸
 const PANEL_W: f64 = 1080.0;
 const PANEL_H: f64 = 720.0;
+
+/// SQLite 数据库名（插件会放到应用数据目录）
+const DB_URL: &str = "sqlite:floatmemo.db";
+
+const SQL_CREATE_NOTES: &str = "
+CREATE TABLE IF NOT EXISTS notes (
+  id          TEXT    PRIMARY KEY NOT NULL,
+  title       TEXT    NOT NULL,
+  content     TEXT    NOT NULL,
+  color       TEXT    NOT NULL,
+  tags        TEXT    NOT NULL DEFAULT '[]',
+  pinned      INTEGER NOT NULL DEFAULT 0,
+  archived    INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);";
+
+const SQL_INDEX_NOTES: &str =
+    "CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes (updated_at DESC);";
 
 /// 悬浮球停靠的边
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -351,6 +371,27 @@ fn quit_app(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations(
+                    DB_URL,
+                    vec![
+                        Migration {
+                            version: 1,
+                            description: "创建便签表",
+                            sql: SQL_CREATE_NOTES,
+                            kind: MigrationKind::Up,
+                        },
+                        Migration {
+                            version: 2,
+                            description: "便签更新时间索引",
+                            sql: SQL_INDEX_NOTES,
+                            kind: MigrationKind::Up,
+                        },
+                    ],
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None::<Vec<&str>>,

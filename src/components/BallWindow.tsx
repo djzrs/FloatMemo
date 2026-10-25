@@ -15,7 +15,7 @@ import {
   showBallMenu,
   snapBall,
 } from '../lib/desktop'
-import { useNotesStore } from '../stores/notes'
+import { flushNotes, useNotesStore } from '../stores/notes'
 import { Ball } from './Ball'
 import { BallMenu } from './BallMenu'
 import { Panel } from './Panel'
@@ -128,6 +128,12 @@ export function BallWindow() {
     setMode('quick')
   }, [])
 
+  /** 退出前先把改动刷进 SQLite，避免丢掉最后一次编辑 */
+  const quit = useCallback(async () => {
+    await flushNotes().catch(() => undefined)
+    await quitApp().catch(() => undefined)
+  }, [])
+
   const openMenu = useCallback(async () => {
     if (isDesktop) {
       const ok = await showBallMenu().catch(() => false)
@@ -187,7 +193,7 @@ export function BallWindow() {
           onClose={() => {
             // 关掉面板：默认收回悬浮球（进程常驻），关掉"最小化到托盘"则直接退出
             if (minimizeToTray) void collapse()
-            else void quitApp()
+            else void quit()
           }}
           onMinimize={() => void hideWindow().catch(() => undefined)}
         />
@@ -222,7 +228,7 @@ export function BallWindow() {
           onNewNote={() => void openQuick()}
           onOpenPanel={() => openPanel('notes')}
           onSettings={() => openPanel('settings')}
-          onQuit={() => void quitApp()}
+          onQuit={() => void quit()}
         />
         <button
           type="button"
