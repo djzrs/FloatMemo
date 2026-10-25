@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
-import { closeWindow, minimizeWindow } from '../lib/desktop'
+import { hideWindow } from '../lib/desktop'
 import { useNotesStore } from '../stores/notes'
 import { DENSITY_STYLES, useSettingsStore } from '../stores/settings'
 import { Logomark } from './Logomark'
@@ -149,7 +149,16 @@ function NavItem({
   )
 }
 
-export function Panel({ page = 'notes' }: { page?: PanelPage }) {
+export function Panel({
+  page = 'notes',
+  onClose,
+  onMinimize,
+}: {
+  page?: PanelPage
+  /** 桌面端单窗口模式：关闭 = 收回悬浮球 */
+  onClose?: () => void
+  onMinimize?: () => void
+}) {
   const notes = useNotesStore((s) => s.notes)
   const addNote = useNotesStore((s) => s.addNote)
   const updateNote = useNotesStore((s) => s.updateNote)
@@ -433,7 +442,7 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
               <button
                 type="button"
                 aria-label="最小化"
-                onClick={() => void minimizeWindow()}
+                onClick={() => (onMinimize ? onMinimize() : void hideWindow())}
                 className="grid h-[28px] w-[30px] place-items-center rounded-[6px] text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
               >
                 <Minus size={14} strokeWidth={2} />
@@ -441,7 +450,7 @@ export function Panel({ page = 'notes' }: { page?: PanelPage }) {
               <button
                 type="button"
                 aria-label="关闭"
-                onClick={() => void closeWindow()}
+                onClick={() => (onClose ? onClose() : void hideWindow())}
                 className="grid h-[28px] w-[30px] place-items-center rounded-[6px] text-ink-400 transition-colors hover:bg-[#E81123] hover:text-white"
               >
                 <X size={14} strokeWidth={2} />
