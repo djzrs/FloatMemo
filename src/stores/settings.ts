@@ -13,6 +13,10 @@ export type MysqlConfig = {
   password: string
   database: string
   table: string
+  /** 加密方式：none=明文 / required=TLS 校验证书 / insecure=TLS 不校验 */
+  sslMode: 'none' | 'required' | 'insecure'
+  /** 自定义 CA 证书路径（可选） */
+  caPath: string
 }
 
 export type Settings = {
@@ -57,6 +61,8 @@ const DEFAULTS: Settings = {
     password: '',
     database: 'floatmemo',
     table: 'floatmemo_notes',
+    sslMode: 'none',
+    caPath: '',
   },
 }
 
@@ -82,6 +88,16 @@ export const useSettingsStore = create<SettingsState>()(
         minimizeToTray: state.minimizeToTray,
         mysql: state.mysql,
       }),
+      // 老版本存的 mysql 配置没有 sslMode / caPath，合并时补上默认值，
+      // 否则升级后设置页会读到 undefined
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<Settings> | undefined
+        return {
+          ...current,
+          ...saved,
+          mysql: { ...DEFAULTS.mysql, ...(saved?.mysql ?? {}) },
+        }
+      },
     },
   ),
 )

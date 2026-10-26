@@ -25,7 +25,6 @@ export async function mysqlPing(config: MysqlConfig): Promise<number> {
   if (!isDesktop) throw new Error('浏览器预览不支持 MySQL 备份')
   return (await invoke('mysql_ping', { config })) as number
 }
-
 /** 立即备份：把全部便签 upsert 进 MySQL，并清理远端已删除的旧行 */
 export async function mysqlBackup(
   config: MysqlConfig,

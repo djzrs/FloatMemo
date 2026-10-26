@@ -25,6 +25,8 @@ fn config() -> MysqlConfig {
         database: std::env::var("FLOATMEMO_TEST_MYSQL_DB")
             .unwrap_or_else(|_| "floatmemo_test".into()),
         table: Some(TABLE.into()),
+        ssl_mode: Some("none".into()),
+        ca_path: None,
     }
 }
 
@@ -165,4 +167,73 @@ fn ipc_payload_contract() {
     let minimal = r#"{"config":{"host":"h","port":3306,"user":"u","password":"p","database":"d"},"notes":[]}"#;
     let parsed: Payload = serde_json::from_str(minimal).expect("缺省 table 应能解析");
     assert!(parsed.config.table.is_none());
+}
+
+/// 针对 TiDB Cloud Serverless（强制 TLS）的连接测试。
+/// 需要真实凭据，通过环境变量传入：
+///   FLOATMEMO_TIDB_HOST=gateway01.ap-northeast-1.prod.aws.tidbcloud.com
+///   FLOATMEMO_TIDB_PORT=4000
+///   FLOATMEMO_TIDB_USER=xxx.root
+///   FLOATMEMO_TIDB_PASSWORD=xxx
+///   FLOATMEMO_TIDB_DB=test
+#[test]
+fn tidb_cloud_requires_tls() {
+    let host = match std::env::var("FLOATMEMO_TIDB_HOST") {
+        Ok(h) => h,
+        Err(_) => return, // 没配凭据就跳过
+    };
+    let port: u16 = std::env::var("FLOATMEMO_TIDB_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(4000);
+    let cfg = MysqlConfig {
+        host,
+        port,
+        user: std::env::var("FLOATMEMO_TIDB_USER").unwrap_or_default(),
+        password: std::env::var("FLOATMEMO_TIDB_PASSWORD").unwrap_or_default(),
+        database: std::env::var("FLOATMEMO_TIDB_DB").unwrap_or_else(|_| "test".into()),
+        table: Some("floatmemo_notes".into()),
+        ssl_mode: Some("required".into()),
+        ca_path: None,
+    };
+
+    // TLS 校验模式下应能连上并读到条数
+    let count = floatmemo_lib::mysql::ping(&cfg).expect("TLS 连接应成功");
+    println!("TiDB 连接成功，目标表已有 {} 条", count);
+
+    // 完整备份流程
+    let notes = vec![note("tidb-1", "来自 TiDB 的便签", 1000)];
+    let result = floatmemo_lib::mysql::backup(&cfg, &notes).expect("TiDB 备份应成功");
+    assert_eq!(result.written, 1);
+    assert!(result.total >= 1);
+
+    // 明文模式应被服务端拒绝（TiDB Serverless 强制 TLS）
+    let mut plain = cfg.clone();
+    plain.ssl_mode = Some("none".into());
+    let err = floatmemo_lib::mysql::ping(&plain).expect_err("明文连接应被拒绝");
+    println!("明文连接如期失败：{}", err);
+    // 错误已被翻译成中文提示
+    assert!(
+        err.contains("强制要求加密连接"),
+        "错误信息应提示需要加密，实际：{}",
+        err
+    );
+
+    // 回读校验：刚写入的便签确实在 TiDB 里，中文不乱码
+    let mut conn = Conn::new(floatmemo_lib::mysql::build_opts(&cfg).unwrap()).unwrap();
+    let title: Option<String> = conn
+        .exec_first(
+            "SELECT title FROM `floatmemo_notes` WHERE id = 'tidb-1'",
+            (),
+        )
+        .unwrap();
+    assert_eq!(title.as_deref(), Some("来自 TiDB 的便签"));
+    let tags: Option<String> = conn
+        .exec_first(
+            "SELECT tags FROM `floatmemo_notes` WHERE id = 'tidb-1'",
+            (),
+        )
+        .unwrap();
+    assert!(tags.unwrap().contains("测试"));
+    println!("TiDB 回读校验通过");
 }

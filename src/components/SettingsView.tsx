@@ -665,7 +665,28 @@ export function SettingsView() {
                       onChange={(v) => patchMysqlConfig({ table: v })}
                       placeholder="floatmemo_notes"
                     />
+                    <Field
+                      label="CA 证书"
+                      value={mysql.caPath}
+                      onChange={(v) => patchMysqlConfig({ caPath: v })}
+                      placeholder="可选，如 C:\\certs\\ca.pem"
+                    />
                   </div>
+
+                  <Row
+                    title="加密方式"
+                    desc="TiDB Cloud 等云数据库强制要求 TLS，选明文会被服务端拒绝"
+                  >
+                    <Segmented<'none' | 'required' | 'insecure'>
+                      value={mysql.sslMode}
+                      onChange={(v) => patchMysqlConfig({ sslMode: v })}
+                      options={[
+                        { value: 'none', label: '明文' },
+                        { value: 'required', label: 'TLS 校验' },
+                        { value: 'insecure', label: 'TLS 不校验' },
+                      ]}
+                    />
+                  </Row>
 
                   <Row title="连接测试" desc="确认能连上服务器并读到目标表">
                     <OutlineButton
