@@ -166,7 +166,7 @@ export function Panel({
   const archiveNote = useNotesStore((s) => s.archiveNote)
 
   const [nav, setNav] = useState<PanelPage>(page)
-  const [version, setVersion] = useState('0.2.0')
+  const [version, setVersion] = useState('0.2.1')
   const [query, setQuery] = useState('')
   const [colorFilter, setColorFilter] = useState<NoteColorKey | null>(null)
   const [tagFilter, setTagFilter] = useState<string | null>(null)

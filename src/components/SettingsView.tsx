@@ -203,7 +203,7 @@ export function SettingsView() {
   const importNotes = useNotesStore((s) => s.importNotes)
 
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
-  const [version, setVersion] = useState('0.2.0')
+  const [version, setVersion] = useState('0.2.1')
   const [mysqlStatus, setMysqlStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [backingUp, setBackingUp] = useState(false)

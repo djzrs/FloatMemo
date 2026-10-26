@@ -93,7 +93,7 @@ export async function appVersion(): Promise<string> {
   }
 }
 
-const FALLBACK_VERSION = '0.2.0'
+const FALLBACK_VERSION = '0.2.1'
 
 export async function quitApp(): Promise<void> {
   if (!isDesktop) return
