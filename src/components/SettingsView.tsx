@@ -16,7 +16,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { COLOR_ORDER, NOTE_COLORS } from '../data/colors'
 import { exportJson, exportMarkdown, parseBackup } from '../lib/backup'
-import { appVersion, autoStartEnabled, isDesktop, setAutoStart } from '../lib/desktop'
+import { appVersion, autoStartEnabled, isDesktop, registerShortcuts, setAutoStart } from '../lib/desktop'
 import { mysqlBackup, mysqlBackupStatus, mysqlPing, type MysqlBackupStatus } from '../lib/mysql'
 import { formatDateTime } from '../lib/time'
 import { useNotesStore } from '../stores/notes'
@@ -127,14 +127,6 @@ function Segmented<T extends string | number>({
   )
 }
 
-function Key({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="inline-flex h-[24px] min-w-[24px] items-center justify-center rounded-[6px] border border-ink-200/90 border-b-[2px] bg-white px-1.5 font-sans text-[10.5px] font-medium text-ink-600">
-      {children}
-    </kbd>
-  )
-}
-
 function OutlineButton({
   icon: Icon,
   label,
@@ -208,6 +200,12 @@ export function SettingsView() {
   const [testing, setTesting] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
   const [lastBackup, setLastBackup] = useState<MysqlBackupStatus | null>(null)
+  // 快捷键编辑：先存在本地，点「应用」成功后才写进 store（失败则回滚）
+  const [scQuick, setScQuick] = useState(settings.shortcuts.quick)
+  const [scPanel, setScPanel] = useState(settings.shortcuts.panel)
+  const [scSearch, setScSearch] = useState(settings.shortcuts.search)
+  const [applying, setApplying] = useState(false)
+  const [scStatus, setScStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const statusTimer = useRef<number | undefined>(undefined)
 
@@ -281,6 +279,37 @@ export function SettingsView() {
     setStatus({ ok, text })
     window.clearTimeout(statusTimer.current)
     statusTimer.current = window.setTimeout(() => setStatus(null), 4000)
+  }
+
+  /** 把输入框里的快捷键真正注册到系统；成功才写进设置，失败回滚 UI */
+  const applyShortcuts = async () => {
+    if (!isDesktop) return
+    setApplying(true)
+    setScStatus(null)
+    try {
+      await registerShortcuts(scQuick, scPanel, scSearch)
+      settings.patch({
+        shortcuts: { quick: scQuick, panel: scPanel, search: scSearch },
+      })
+      setScStatus({ ok: true, text: '快捷键已生效' })
+    } catch (error) {
+      // 失败：Rust 侧已 unregister_all 回滚，UI 退回 store 里上次成功的值
+      setScQuick(settings.shortcuts.quick)
+      setScPanel(settings.shortcuts.panel)
+      setScSearch(settings.shortcuts.search)
+      setScStatus({
+        ok: false,
+        text: `改键失败：${error instanceof Error ? error.message : String(error)}`,
+      })
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const resetShortcuts = () => {
+    setScQuick('Ctrl+Shift+N')
+    setScPanel('Ctrl+Shift+M')
+    setScSearch('Ctrl+K')
   }
 
   const handleFile = async (file?: File) => {
@@ -444,36 +473,78 @@ export function SettingsView() {
             {active === 'shortcut' && (
               <>
                 <Card icon={Keyboard} title="全局快捷键">
-                  <Row title="唤起速记条" desc="任意窗口下按下，立即开始记录">
-                    <div className="flex items-center gap-1">
-                      <Key>Ctrl</Key>
-                      <span className="text-[10px] text-ink-300">+</span>
-                      <Key>Shift</Key>
-                      <span className="text-[10px] text-ink-300">+</span>
-                      <Key>N</Key>
+                  <div className="flex items-center justify-between gap-6 border-b border-ink-100/80 py-[8px]">
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] text-ink-800">唤起速记条</div>
+                      <div className="text-[11px] text-ink-400">任意窗口下按下，立即开始记录</div>
                     </div>
-                  </Row>
-                  <Row title="打开便签面板" desc="查看、搜索与整理全部便签">
-                    <div className="flex items-center gap-1">
-                      <Key>Ctrl</Key>
-                      <span className="text-[10px] text-ink-300">+</span>
-                      <Key>Shift</Key>
-                      <span className="text-[10px] text-ink-300">+</span>
-                      <Key>M</Key>
+                    <Field
+                      label=""
+                      value={scQuick}
+                      onChange={setScQuick}
+                      placeholder="Ctrl+Shift+N"
+                      className="w-[170px]"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-6 border-b border-ink-100/80 py-[8px]">
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] text-ink-800">打开便签面板</div>
+                      <div className="text-[11px] text-ink-400">查看、搜索与整理全部便签</div>
                     </div>
-                  </Row>
-                  <Row title="面板内搜索" desc="光标在面板里时可直接按下">
-                    <div className="flex items-center gap-1">
-                      <Key>Ctrl</Key>
-                      <span className="text-[10px] text-ink-300">+</span>
-                      <Key>K</Key>
+                    <Field
+                      label=""
+                      value={scPanel}
+                      onChange={setScPanel}
+                      placeholder="Ctrl+Shift+M"
+                      className="w-[170px]"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-6 py-[8px]">
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] text-ink-800">面板内搜索</div>
+                      <div className="text-[11px] text-ink-400">光标在面板里时可直接按下</div>
                     </div>
-                  </Row>
+                    <Field
+                      label=""
+                      value={scSearch}
+                      onChange={setScSearch}
+                      placeholder="Ctrl+K"
+                      className="w-[170px]"
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <OutlineButton
+                      icon={Keyboard}
+                      label={applying ? '注册中…' : '应用快捷键'}
+                      primary
+                      onClick={applyShortcuts}
+                      disabled={applying || !isDesktop}
+                    />
+                    <OutlineButton
+                      icon={SlidersHorizontal}
+                      label="恢复默认"
+                      onClick={resetShortcuts}
+                      disabled={applying || !isDesktop}
+                    />
+                  </div>
+                  {scStatus && (
+                    <p
+                      className={`mt-2 text-[11px] ${
+                        scStatus.ok ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {scStatus.text}
+                    </p>
+                  )}
+                  <p className="mt-2 text-[11px] leading-[18px] text-ink-400">
+                    格式和 global-hotkey 一致，如 Ctrl+Shift+N / Alt+Shift+S。改键会立刻生效；
+                    若被其他软件占用，注册失败并回滚，不会留下"只注册了一半"的状态。
+                  </p>
                 </Card>
                 <Card icon={Info} title="说明">
                   <p className="py-2.5 text-[11px] leading-[18px] text-ink-500">
-                    全局快捷键需要 Tauri 注册；面板内的 Ctrl + K
-                    已可用。若快捷键被其他软件占用，桌面版会在托盘提示并允许改键。
+                    快捷键在设置页里改，改完点「应用快捷键」才真正注册到系统。
+                    面板内的搜索快捷键在面板打开时直接可用，未打开面板时按下会自动打开面板并聚焦搜索框。
                   </p>
                 </Card>
               </>

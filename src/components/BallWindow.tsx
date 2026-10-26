@@ -11,6 +11,7 @@ import {
   moveBallBy,
   openPanelPage,
   quitApp,
+  restoreBallPosition,
   setBallHidden,
   showBallMenu,
   snapBall,
@@ -29,15 +30,21 @@ export function BallWindow() {
   const [mode, setMode] = useState<Mode>('ball')
   const [page, setPage] = useState<PanelPage>('notes')
   const [tucked, setTucked] = useState(false)
+  // 递增这个值会让 Panel 聚焦搜索框（全局快捷键唤起搜索时用）
+  const [focusSearch, setFocusSearch] = useState(0)
   const addNote = useNotesStore((s) => s.addNote)
   const ballOpacity = useSettingsStore((s) => s.ballOpacity)
   const halfHidden = useSettingsStore((s) => s.halfHidden)
   const snapToEdge = useSettingsStore((s) => s.snapToEdge)
   const minimizeToTray = useSettingsStore((s) => s.minimizeToTray)
+  const ballPosition = useSettingsStore((s) => s.ballPosition)
+  const snapToEdgeState = useSettingsStore((s) => s.snapToEdge)
   const patchSettings = useSettingsStore((s) => s.patch)
 
   const idleTimer = useRef<number | undefined>(undefined)
   const suppressClick = useRef(false)
+  const modeRef = useRef(mode)
+  modeRef.current = mode
 
   /** 半隐藏：静置 3 秒后滑出屏幕，只留一条边 */
   const armIdle = useCallback(() => {
@@ -170,9 +177,38 @@ export function BallWindow() {
         }),
       )
       cleanups.push(await listen('floatmemo://ball', () => setMode('ball')))
+      cleanups.push(
+        await listen('floatmemo://search', () => {
+          setPage('notes')
+          setMode('panel')
+          setFocusSearch((n) => n + 1)
+        }),
+      )
+      // 拖动结束时 Rust 通知的球位置：自由态存下来，重启后还原
+      cleanups.push(
+        await listen<[boolean, [number, number] | null]>('floatmemo://ball-pos', (e) => {
+          const pos = e.payload?.[1]
+          patchSettings({
+            ballPosition: pos ? { x: pos[0], y: pos[1] } : null,
+          })
+        }),
+      )
     }
     void bind()
     return () => cleanups.forEach((fn) => fn())
+  }, [])
+
+  // 启动时按设置还原球的位置（Rust 静态默认贴边，需前端把上次存的值灌进去）
+  useEffect(() => {
+    if (!isDesktop) return
+    const pos = ballPosition
+    void restoreBallPosition(
+      pos ? pos.x : null,
+      pos ? pos.y : null,
+      !snapToEdgeState,
+    )
+    // 只在挂载时还原一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Esc 收起（面板不响应，避免编辑中断）
@@ -185,6 +221,42 @@ export function BallWindow() {
     return () => window.removeEventListener('keydown', onKey)
   }, [mode, collapse])
 
+  /**
+   * 失焦自动收起（规划 3.4 节）：
+   * 速记条 / 右键菜单失去焦点时，150ms 后收回悬浮球（延时是为了防止点中本窗口元素时的瞬时失焦误收）。
+   * 得焦即取消。面板是主工作区，不自动收起。
+   * 窗口被隐藏时（托盘收起）也不触发，避免把藏起来的窗口重新弹出来。
+   */
+  useEffect(() => {
+    if (!isDesktop) return
+    let timer: number | undefined
+    const cleanTimer = () => window.clearTimeout(timer)
+    const cleanups: Array<() => void> = []
+    const bind = async () => {
+      cleanups.push(await listen('tauri://blur', () => {
+        cleanTimer()
+        const m = modeRef.current
+        if (m !== 'quick' && m !== 'menu') return
+        if (document.visibilityState === 'hidden') return
+        timer = window.setTimeout(() => {
+          const m2 = modeRef.current
+          if (m2 !== 'quick' && m2 !== 'menu') return
+          if (document.visibilityState === 'hidden') return
+          void collapse()
+        }, 150)
+      }))
+      cleanups.push(await listen('tauri://focus', () => {
+        cleanTimer()
+      }))
+    }
+    void bind()
+    return () => {
+      cleanTimer()
+      cleanups.forEach((fn) => fn())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapse])
+
   const level = ballOpacity
   const ballState = mode === 'menu' ? 'menu' : hover ? 'hover' : 'idle'
 
@@ -193,6 +265,7 @@ export function BallWindow() {
       <div className="grid h-full w-full place-items-center">
         <Panel
           page={page}
+          focusSearch={focusSearch}
           onClose={() => {
             // 关掉面板：默认收回悬浮球（进程常驻），关掉"最小化到托盘"则直接退出
             if (minimizeToTray) void collapse()

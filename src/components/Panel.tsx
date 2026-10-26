@@ -20,7 +20,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
-import { appVersion, hideWindow } from '../lib/desktop'
+import { appVersion, hideWindow, isDesktop } from '../lib/desktop'
+import { searchNotes } from '../lib/db'
 import { useNotesStore } from '../stores/notes'
 import { DENSITY_STYLES, useSettingsStore } from '../stores/settings'
 import { Logomark } from './Logomark'
@@ -153,11 +154,14 @@ export function Panel({
   page = 'notes',
   onClose,
   onMinimize,
+  focusSearch,
 }: {
   page?: PanelPage
   /** 桌面端单窗口模式：关闭 = 收回悬浮球 */
   onClose?: () => void
   onMinimize?: () => void
+  /** 外部（如全局快捷键）要求聚焦搜索框时递增；为 0 表示不聚焦 */
+  focusSearch?: number
 }) {
   const notes = useNotesStore((s) => s.notes)
   const addNote = useNotesStore((s) => s.addNote)
@@ -174,10 +178,21 @@ export function Panel({
   const [sortOpen, setSortOpen] = useState(false)
   const [editing, setEditing] = useState<{ note: Note | null } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  // FTS5 全文搜索结果（桌面端才启用，非桌面端保持内存过滤）
+  const [ftsResults, setFtsResults] = useState<Note[] | null>(null)
+  const [ftsLoading, setFtsLoading] = useState(false)
 
   useEffect(() => {
     void appVersion().then(setVersion)
   }, [])
+
+  // 外部要求聚焦搜索框（如全局快捷键唤起）
+  useEffect(() => {
+    if ((focusSearch ?? 0) > 0) {
+      searchRef.current?.focus()
+      searchRef.current?.select()
+    }
+  }, [focusSearch])
 
   const view = useSettingsStore((s) => s.defaultView)
   const density = useSettingsStore((s) => s.cardDensity)
@@ -200,10 +215,37 @@ export function Panel({
       .map(([name, count]) => ({ name, count, dot: tagDot(name) }))
   }, [activeNotes])
 
+  // 桌面端：query 变化时走 FTS5 全文搜索（异步）；非桌面端保持内存过滤
+  useEffect(() => {
+    if (!isDesktop) {
+      setFtsResults(null)
+      setFtsLoading(false)
+      return
+    }
+    const q = query.trim()
+    if (!q) {
+      setFtsResults(null)
+      setFtsLoading(false)
+      return
+    }
+    setFtsLoading(true)
+    let cancelled = false
+    void searchNotes(q).then((rows) => {
+      if (cancelled) return
+      setFtsResults(rows)
+      setFtsLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [query])
+
   const list = useMemo(() => {
     const base = nav === 'pinned' ? pinnedNotes : activeNotes
     const q = query.trim().toLowerCase()
-    return base
+    // 桌面端且 FTS5 已返回结果时用 FTS5 结果，否则退回内存过滤
+    const pool = isDesktop && ftsResults ? ftsResults : base
+    return pool
       .filter((n) => {
         if (colorFilter && n.color !== colorFilter) return false
         if (tagFilter && !n.tags.includes(tagFilter)) return false
@@ -216,7 +258,7 @@ export function Panel({
         if (sort === 'created') return b.createdAt - a.createdAt
         return b.updatedAt - a.updatedAt
       })
-  }, [activeNotes, pinnedNotes, nav, query, colorFilter, tagFilter, sort])
+  }, [activeNotes, pinnedNotes, nav, query, colorFilter, tagFilter, sort, ftsResults])
 
   const hasFilter = Boolean(query.trim() || colorFilter || tagFilter)
 
@@ -385,7 +427,11 @@ export function Panel({
               placeholder="搜索标题、正文或标签…"
               className="h-[32px] w-full rounded-full border border-ink-200/70 bg-white pr-14 pl-8.5 text-[12px] text-ink-700 shadow-[0_1px_2px_rgba(15,45,45,0.03)] outline-none transition-shadow placeholder:text-ink-300 focus:border-brand-300 focus:ring-2 focus:ring-brand-100"
             />
-            {query ? (
+            {ftsLoading ? (
+              <span className="absolute top-1/2 right-2 -translate-y-1/2">
+                <span className="block h-[14px] w-[14px] animate-spin rounded-full border-2 border-ink-200 border-t-brand-400" />
+              </span>
+            ) : query ? (
               <button
                 type="button"
                 onClick={() => setQuery('')}

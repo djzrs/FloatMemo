@@ -99,3 +99,29 @@ export async function quitApp(): Promise<void> {
   if (!isDesktop) return
   await invoke('quit_app')
 }
+
+/**
+ * 重新注册全局快捷键（用户在设置页改键后调用）。
+ * 成功才应把新值写进设置；失败返回错误信息，前端据此回滚 UI。
+ */
+export async function registerShortcuts(
+  quick: string,
+  panel: string,
+  search: string,
+): Promise<void> {
+  if (!isDesktop) return
+  await invoke('register_shortcuts', { quick, panel, search })
+}
+
+/**
+ * 启动时按设置还原球的位置与吸附状态。Rust 侧静态默认贴边，需要前端把上次存的值灌进来。
+ * docked = 是否吸附（= 设置里的 snapToEdge 取反）。
+ */
+export async function restoreBallPosition(
+  x: number | null,
+  y: number | null,
+  docked: boolean,
+): Promise<void> {
+  if (!isDesktop) return
+  await invoke('restore_ball_position', { x, y, docked })
+}
