@@ -31,6 +31,9 @@ const MENU_H: f64 = 372.0;
 /// 展开为便签面板时的窗口尺寸
 const PANEL_W: f64 = 1080.0;
 const PANEL_H: f64 = 720.0;
+/// 贴纸模式：钉在桌面上的便签卡片尺寸
+const STICKER_W: f64 = 340.0;
+const STICKER_H: f64 = 260.0;
 
 /// SQLite 数据库名（插件会放到应用数据目录）
 const DB_URL: &str = "sqlite:floatmemo.db";
@@ -543,6 +546,95 @@ fn register_shortcuts(
     }
 }
 
+// ── 贴纸模式 ────────────────────────────────────────────────
+
+/// 把球窗变成「贴纸」：无边框透明置顶小窗，显示指定便签。
+/// 位置可传物理像素坐标（多显示器摆放），不传则放在当前屏幕中央。
+#[tauri::command]
+fn sticker_mode(
+    app: AppHandle,
+    note_id: String,
+    x: Option<i32>,
+    y: Option<i32>,
+) -> Result<(), String> {
+    let ball = app
+        .get_webview_window(BALL)
+        .ok_or_else(|| "球窗不存在".to_string())?;
+    let s = scale_of(&ball);
+    let size = tauri::LogicalSize::new(STICKER_W, STICKER_H).to_physical::<i32>(s);
+    let pos = match (x, y) {
+        (Some(px), Some(py)) => PhysicalPosition::new(px, py),
+        _ => {
+            let r = screen_rect(&ball).ok_or_else(|| "拿不到显示器".to_string())?;
+            let (mw, mh) = monitor_of(&ball).unwrap_or((STICKER_W, STICKER_H));
+            let lp = tauri::LogicalPosition::new((mw - STICKER_W) / 2.0, (mh - STICKER_H) / 2.0)
+                .to_physical::<i32>(s);
+            PhysicalPosition::new(r.x + lp.x, r.y + lp.y)
+        }
+    };
+    ball.set_size(PhysicalSize::new(size.width, size.height))
+        .map_err(|err| err.to_string())?;
+    ball.set_position(pos).map_err(|err| err.to_string())?;
+    clear_window_region(&ball);
+    // 贴纸是常驻置顶小窗，始终保持在最前
+    let _ = ball.set_always_on_top(true);
+    // 默认可交互；点击穿透由前端开关控制
+    let _ = ball.set_ignore_cursor_events(false);
+    let _ = ball.show();
+    let _ = ball.set_focus();
+    let _ = app.emit("floatmemo://sticker", note_id);
+    Ok(())
+}
+
+/// 退出贴纸模式，恢复成悬浮球
+#[tauri::command]
+fn exit_sticker(app: AppHandle) -> Result<(), String> {
+    let ball = app
+        .get_webview_window(BALL)
+        .ok_or_else(|| "球窗不存在".to_string())?;
+    reset_ball(&ball);
+    let _ = ball.set_ignore_cursor_events(false);
+    let _ = ball.show();
+    let _ = ball.set_focus();
+    let _ = app.emit("floatmemo://ball", ());
+    Ok(())
+}
+
+/// 贴纸点击穿透开关：开启后鼠标事件穿透到下层窗口，贴纸只作展示
+#[tauri::command]
+fn set_sticker_click_through(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let ball = app
+        .get_webview_window(BALL)
+        .ok_or_else(|| "球窗不存在".to_string())?;
+    ball.set_ignore_cursor_events(enabled)
+        .map_err(|err| err.to_string())
+}
+
+/// 贴纸拖动：按鼠标位移移动窗口（不吸附，可摆到任意位置）
+#[tauri::command]
+fn move_sticker_by(app: AppHandle, dx: f64, dy: f64) -> Result<(), String> {
+    let ball = app
+        .get_webview_window(BALL)
+        .ok_or_else(|| "球窗不存在".to_string())?;
+    let s = scale_of(&ball);
+    let pos = ball.outer_position().map_err(|e| e.to_string())?;
+    let nx = pos.x + (dx * s).round() as i32;
+    let ny = pos.y + (dy * s).round() as i32;
+    // 别让贴纸整个跑出屏幕（至少留 40px 可抓）
+    let limit = if let Some(r) = screen_rect(&ball) {
+        let sw = (STICKER_W * s).round() as i32;
+        let sh = (STICKER_H * s).round() as i32;
+        (
+            nx.clamp(r.x - sw + 40, r.x + r.w - 40),
+            ny.clamp(r.y - sh + 40, r.y + r.h - 40),
+        )
+    } else {
+        (nx, ny)
+    };
+    ball.set_position(PhysicalPosition::new(limit.0, limit.1))
+        .map_err(|e| e.to_string())
+}
+
 // ── MySQL 备份 ────────────────────────────────────────────────
 
 /// 最近一次备份的状态（进程内保存）
@@ -660,7 +752,11 @@ pub fn run() {
             mysql_backup_status,
             quit_app,
             register_shortcuts,
-            restore_ball_position
+            restore_ball_position,
+            sticker_mode,
+            exit_sticker,
+            set_sticker_click_through,
+            move_sticker_by
         ])
         .setup(|app| {
             if let Some(ball) = app.get_webview_window(BALL) {
@@ -670,9 +766,14 @@ pub fn run() {
             let quick = MenuItem::with_id(app, "quick", "速记…", true, None::<&str>)?;
             let panel = MenuItem::with_id(app, "panel", "打开便签面板", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "设置…", true, None::<&str>)?;
+            let exit_sticker_item =
+                MenuItem::with_id(app, "exit_sticker_menu", "退出贴纸", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "退出浮笺", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quick, &panel, &settings, &sep, &quit])?;
+            let menu = Menu::with_items(
+                app,
+                &[&quick, &panel, &settings, &exit_sticker_item, &sep, &quit],
+            )?;
 
             TrayIconBuilder::with_id("floatmemo-tray")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -688,6 +789,10 @@ pub fn run() {
                     }
                     "settings" => {
                         let _ = open_panel_page(app.clone(), "settings".into());
+                    }
+                    "exit_sticker_menu" => {
+                        // 穿透死锁时从托盘恢复交互（无操作也无害）
+                        let _ = exit_sticker(app.clone());
                     }
                     "quit" => app.exit(0),
                     _ => {}

@@ -10,9 +10,11 @@ type Props = {
   onOpen: () => void
   onTogglePin: () => void
   onArchive: () => void
+  /** 钉为桌面贴纸 */
+  onSticker?: () => void
 }
 
-export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
+export function NoteCard({ note, onOpen, onTogglePin, onArchive, onSticker }: Props) {
   const c = NOTE_COLORS[note.color]
   const density = useSettingsStore((s) => s.cardDensity)
   const d = DENSITY_STYLES[density]
@@ -57,6 +59,7 @@ export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
             onEdit={onOpen}
             onTogglePin={onTogglePin}
             onArchive={onArchive}
+            onSticker={onSticker}
             triggerClassName="h-[18px] w-[18px]"
             iconColor={c.sub}
           />
