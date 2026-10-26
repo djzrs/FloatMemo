@@ -1,0 +1,59 @@
+name: Bug 报告
+description: 提交一个缺陷，帮助我们改进
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你花时间报告问题！请尽量补充以下信息，以便我们快速定位。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么？
+      description: 描述你期望的行为与实际发生的行为
+      placeholder: 期望…… 实际……
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 怎样可以稳定复现？
+      placeholder: |
+        1. 打开应用
+        2. 点击悬浮球
+        3. 看到……
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 环境
+      description: 你使用的安装方式
+      options:
+        - 安装包（FloatMemo_*_setup.exe）
+        - 免安装版（FloatMemo-portable.exe）
+        - 源码运行（npm run desktop）
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本号
+      description: 设置页左下角显示的版本号（如 0.2.1）
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows 版本
+      description: 如 Windows 11 22H2 / Windows 10 21H2
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 如有报错信息、开发者工具 Console 输出或截图，请粘贴到这里
+      render: text
