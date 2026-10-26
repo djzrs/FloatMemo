@@ -39,6 +39,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
           releaseName: 'FloatMemo ${{ github.event.inputs.tag || github.ref_name }}'
@@ -47,7 +49,7 @@ jobs:
           prerelease: false
           args: --target x86_64-pc-windows-msvc
 
-      - name: 上传免安装版到 Release
+      - name: 上传免安装版与更新清单到 Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,7 +57,15 @@ jobs:
         run: |
           $exe = Get-Item src-tauri/target/x86_64-pc-windows-msvc/release/floatmemo.exe
           Copy-Item $exe.FullName src-tauri/target/FloatMemo-portable.exe
-          gh release upload $env:TAG src-tauri/target/FloatMemo-portable.exe --clobber --repo $env:GITHUB_REPOSITORY
+          $assets = @('src-tauri/target/FloatMemo-portable.exe')
+          # 自动更新：latest.json 清单 + 安装包签名
+          $nsis = Get-ChildItem src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe -ErrorAction SilentlyContinue
+          if ($nsis) { $assets += $nsis.FullName }
+          $sig = Get-ChildItem src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sig -ErrorAction SilentlyContinue
+          if ($sig) { $assets += $sig.FullName }
+          $latest = Get-Item src-tauri/target/x86_64-pc-windows-msvc/release/latest.json -ErrorAction SilentlyContinue
+          if ($latest) { $assets += $latest.FullName }
+          gh release upload $env:TAG $assets --clobber --repo $env:GITHUB_REPOSITORY
 
       - name: 上传构建产物到 Artifacts
         uses: actions/upload-artifact@v4
@@ -64,5 +74,7 @@ jobs:
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/floatmemo.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sig
+            src-tauri/target/x86_64-pc-windows-msvc/release/latest.json
             src-tauri/target/FloatMemo-portable.exe
           if-no-files-found: error

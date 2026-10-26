@@ -19,6 +19,7 @@ import { exportJson, exportMarkdown, parseBackup } from '../lib/backup'
 import { appVersion, autoStartEnabled, isDesktop, registerShortcuts, setAutoStart } from '../lib/desktop'
 import { mysqlBackup, mysqlBackupStatus, mysqlPing, type MysqlBackupStatus } from '../lib/mysql'
 import { formatDateTime } from '../lib/time'
+import { checkForUpdate, downloadAndInstallUpdate } from '../lib/updater'
 import { useNotesStore } from '../stores/notes'
 import { useSettingsStore, type CardDensity, type PanelView } from '../stores/settings'
 import { Ball } from './Ball'
@@ -196,6 +197,9 @@ export function SettingsView() {
 
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [version, setVersion] = useState('0.2.1')
+  const [updateStatus, setUpdateStatus] = useState<
+    { kind: 'checking' | 'available' | 'up-to-date' | 'downloading' | 'error'; text: string } | null
+  >(null)
   const [mysqlStatus, setMysqlStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
@@ -310,6 +314,43 @@ export function SettingsView() {
     setScQuick('Ctrl+Shift+N')
     setScPanel('Ctrl+Shift+M')
     setScSearch('Ctrl+K')
+  }
+
+  /** 检查更新（仅桌面端） */
+  const handleCheckUpdate = async () => {
+    setUpdateStatus({ kind: 'checking', text: '正在检查更新…' })
+    const result = await checkForUpdate()
+    switch (result.status) {
+      case 'up-to-date':
+        setUpdateStatus({ kind: 'up-to-date', text: `已是最新版本（v${version}）` })
+        break
+      case 'available':
+        setUpdateStatus({
+          kind: 'available',
+          text: `发现新版本 v${result.version}${result.body ? `：${result.body}` : ''}`,
+        })
+        break
+      case 'error':
+        setUpdateStatus({ kind: 'error', text: `检查更新失败：${result.message}` })
+        break
+    }
+  }
+
+  /** 下载并安装更新，完成后自动重启 */
+  const handleInstallUpdate = async () => {
+    setUpdateStatus({ kind: 'downloading', text: '正在下载更新…' })
+    try {
+      await downloadAndInstallUpdate((downloaded, total) => {
+        const pct = total > 0 ? Math.round((downloaded / total) * 100) : 0
+        setUpdateStatus({ kind: 'downloading', text: `正在下载更新… ${pct}%` })
+      })
+      // 安装完成后 relaunch() 会重启应用，这里不会继续执行
+    } catch (error) {
+      setUpdateStatus({
+        kind: 'error',
+        text: `更新失败：${error instanceof Error ? error.message : String(error)}`,
+      })
+    }
   }
 
   const handleFile = async (file?: File) => {
@@ -830,18 +871,43 @@ export function SettingsView() {
                   <div className="mt-3.5 flex items-center gap-2">
                     <button
                       type="button"
-                      className="h-[28px] rounded-[7px] bg-brand-600 px-2.5 text-[11px] font-medium text-white shadow-sm transition-colors hover:bg-brand-700"
+                      onClick={() => void handleCheckUpdate()}
+                      disabled={updateStatus?.kind === 'checking' || updateStatus?.kind === 'downloading'}
+                      className="h-[28px] rounded-[7px] bg-brand-600 px-2.5 text-[11px] font-medium text-white shadow-sm transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      检查更新
+                      {updateStatus?.kind === 'checking' ? '检查中…' : '检查更新'}
                     </button>
+                    {updateStatus?.kind === 'available' && (
+                      <button
+                        type="button"
+                        onClick={() => void handleInstallUpdate()}
+                        className="h-[28px] rounded-[7px] bg-emerald-600 px-2.5 text-[11px] font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
+                      >
+                        下载并安装
+                      </button>
+                    )}
                     <button
                       type="button"
+                      onClick={() => window.open('https://github.com/djzrs/FloatMemo', '_blank', 'noopener')}
                       className="h-[28px] rounded-[7px] border border-ink-200/80 bg-white px-2.5 text-[11px] text-ink-600 transition-colors hover:bg-ink-50"
                     >
                       GitHub 仓库
                     </button>
                     <span className="ml-auto text-[10.5px] text-ink-300">MIT License</span>
                   </div>
+                  {updateStatus && (
+                    <p
+                      className={`mt-2 text-[11px] leading-[17px] ${
+                        updateStatus.kind === 'error'
+                          ? 'text-rose-600'
+                          : updateStatus.kind === 'up-to-date'
+                            ? 'text-emerald-600'
+                            : 'text-ink-500'
+                      }`}
+                    >
+                      {updateStatus.text}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

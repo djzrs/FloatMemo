@@ -23,6 +23,7 @@ A small floating ball lives on the edge of your screen: click to jot a note, rig
 - **MySQL backup**: connect to a MySQL server and back up all notes to a table (auto-create DB/table, sync deletions); TLS supported (works with TiDB Cloud's mandatory encryption)
 - **Tray resident**: show/hide/quit from tray; global shortcuts `Ctrl+Shift+N` / `Ctrl+Shift+M` customizable
 - **Single instance**: prevents duplicate launches, second launch wakes the existing window
+- **Auto-update**: "Check for updates" in Settings, pulls new versions from GitHub Releases and installs silently
 
 ## Development
 
@@ -53,6 +54,13 @@ Artifacts:
 
 - `src-tauri/target/release/floatmemo.exe` — portable build with embedded frontend
 - `src-tauri/target/release/bundle/nsis/FloatMemo_0.2.1_x64-setup.exe` — installer
+- `latest.json` + `*.sig` — auto-update manifest & signatures (generated only when signing keys are configured)
+
+> Updater signing: before the first release, generate keys with
+> `npm run tauri signer generate -- -w ~/.tauri/floatmemo.key`, write the public key into
+> `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`; when building, set
+> `TAURI_SIGNING_PRIVATE_KEY` (path or content) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (if any).
+> Keep the private key safe — losing it means you can never ship another update.
 
 ## Technical highlights
 
