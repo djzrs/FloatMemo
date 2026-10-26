@@ -21,6 +21,7 @@ import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
 import { appVersion, hideWindow, isDesktop } from '../lib/desktop'
+import { stickerMode } from '../lib/desktop'
 import { searchNotes } from '../lib/db'
 import { useNotesStore } from '../stores/notes'
 import { DENSITY_STYLES, useSettingsStore } from '../stores/settings'
@@ -56,11 +57,13 @@ function NoteRow({
   onOpen,
   onTogglePin,
   onArchive,
+  onSticker,
 }: {
   note: Note
   onOpen: () => void
   onTogglePin: () => void
   onArchive: () => void
+  onSticker?: () => void
 }) {
   const c = NOTE_COLORS[note.color]
   return (
@@ -111,6 +114,7 @@ function NoteRow({
         onEdit={onOpen}
         onTogglePin={onTogglePin}
         onArchive={onArchive}
+        onSticker={onSticker}
         triggerClassName="h-[22px] w-[22px] text-ink-400"
       />
     </div>
@@ -285,6 +289,16 @@ export function Panel({
     setToast(message)
     window.clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToast(null), 1800)
+  }
+
+  /** 钉为桌面贴纸：桌面端把球窗变成贴纸小窗，浏览器端仅提示 */
+  const stickNote = (note: Note) => {
+    if (!isDesktop) {
+      showToast('贴纸模式仅桌面端可用')
+      return
+    }
+    setEditing(null)
+    void stickerMode(note.id).catch(() => showToast('贴纸模式开启失败'))
   }
 
   const changeNav = (next: PanelPage) => {
@@ -623,6 +637,7 @@ export function Panel({
                           archiveNote(note.id)
                           showToast('已移到回收站')
                         }}
+                        onSticker={() => stickNote(note)}
                       />
                     ))}
                   </div>
@@ -638,6 +653,7 @@ export function Panel({
                           archiveNote(note.id)
                           showToast('已移到回收站')
                         }}
+                        onSticker={() => stickNote(note)}
                       />
                     ))}
                   </div>

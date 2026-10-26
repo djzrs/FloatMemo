@@ -125,3 +125,37 @@ export async function restoreBallPosition(
   if (!isDesktop) return
   await invoke('restore_ball_position', { x, y, docked })
 }
+
+/**
+ * 贴纸模式：把球窗变成显示指定便签的置顶小窗。
+ * x/y 为物理像素坐标（可选，多显示器摆放用）。
+ */
+export async function stickerMode(
+  noteId: string,
+  x?: number,
+  y?: number,
+): Promise<boolean> {
+  if (!isDesktop) return false
+  await invoke('sticker_mode', { noteId, x: x ?? null, y: y ?? null })
+  return true
+}
+
+/** 退出贴纸模式，恢复成悬浮球 */
+export async function exitSticker(): Promise<boolean> {
+  if (!isDesktop) return false
+  await invoke('exit_sticker')
+  return true
+}
+
+/** 贴纸点击穿透开关 */
+export async function setStickerClickThrough(enabled: boolean): Promise<boolean> {
+  if (!isDesktop) return false
+  await invoke('set_sticker_click_through', { enabled })
+  return true
+}
+
+/** 贴纸拖动：按鼠标位移移动窗口（不吸附） */
+export async function moveStickerBy(dx: number, dy: number): Promise<void> {
+  if (!isDesktop) return
+  await invoke('move_sticker_by', { dx, dy })
+}

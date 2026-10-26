@@ -5,6 +5,7 @@ import { useSettingsStore } from '../stores/settings'
 import {
   collapseBall,
   expandQuick,
+  exitSticker,
   hideWindow,
   isDesktop,
   openPanelInBrowser,
@@ -21,8 +22,9 @@ import { Ball } from './Ball'
 import { BallMenu } from './BallMenu'
 import { Panel } from './Panel'
 import { QuickNote } from './QuickNote'
+import { StickerNote } from './StickerNote'
 
-type Mode = 'ball' | 'quick' | 'menu' | 'panel'
+type Mode = 'ball' | 'quick' | 'menu' | 'panel' | 'sticker'
 
 /** 桌面悬浮球窗口：单击速记、右键菜单、放大便签面板。四种形态共用同一个 webview。 */
 export function BallWindow() {
@@ -30,9 +32,12 @@ export function BallWindow() {
   const [mode, setMode] = useState<Mode>('ball')
   const [page, setPage] = useState<PanelPage>('notes')
   const [tucked, setTucked] = useState(false)
+  // 贴纸模式下当前钉住的便签 id
+  const [stickerNoteId, setStickerNoteId] = useState<string | null>(null)
   // 递增这个值会让 Panel 聚焦搜索框（全局快捷键唤起搜索时用）
   const [focusSearch, setFocusSearch] = useState(0)
   const addNote = useNotesStore((s) => s.addNote)
+  const notes = useNotesStore((s) => s.notes)
   const ballOpacity = useSettingsStore((s) => s.ballOpacity)
   const halfHidden = useSettingsStore((s) => s.halfHidden)
   const snapToEdge = useSettingsStore((s) => s.snapToEdge)
@@ -178,6 +183,12 @@ export function BallWindow() {
       )
       cleanups.push(await listen('floatmemo://ball', () => setMode('ball')))
       cleanups.push(
+        await listen<string>('floatmemo://sticker', (e) => {
+          setStickerNoteId(e.payload || null)
+          setMode('sticker')
+        }),
+      )
+      cleanups.push(
         await listen('floatmemo://search', () => {
           setPage('notes')
           setMode('panel')
@@ -211,9 +222,9 @@ export function BallWindow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Esc 收起（面板不响应，避免编辑中断）
+  // Esc 收起（面板/贴纸不响应，避免编辑中断或误收贴纸）
   useEffect(() => {
-    if (mode === 'ball' || mode === 'panel') return
+    if (mode === 'ball' || mode === 'panel' || mode === 'sticker') return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') void collapse()
     }
@@ -236,6 +247,7 @@ export function BallWindow() {
       cleanups.push(await listen('tauri://blur', () => {
         cleanTimer()
         const m = modeRef.current
+        // 贴纸是常驻桌面小窗，失焦不收起（规划：开启点击穿透时禁用失焦收起）
         if (m !== 'quick' && m !== 'menu') return
         if (document.visibilityState === 'hidden') return
         timer = window.setTimeout(() => {
@@ -318,6 +330,28 @@ export function BallWindow() {
         >
           <Ball state="menu" level={level} />
         </button>
+      </div>
+    )
+  }
+
+  if (mode === 'sticker') {
+    const stickerNote = notes.find((n) => n.id === stickerNoteId) ?? null
+    return (
+      <div className="h-full w-full p-1.5">
+        {stickerNote ? (
+          <StickerNote
+            note={stickerNote}
+            onExit={() => {
+              setStickerNoteId(null)
+              void exitSticker().catch(() => undefined)
+              setMode('ball')
+            }}
+          />
+        ) : (
+          <div className="grid h-full w-full place-items-center text-[11px] text-ink-400">
+            便签不存在
+          </div>
+        )}
       </div>
     )
   }

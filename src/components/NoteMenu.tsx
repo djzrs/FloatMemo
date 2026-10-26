@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, Pin, Trash2, type LucideIcon } from 'lucide-react'
+import { MoreHorizontal, Pencil, Pin, Sticker, Trash2, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 
 type Props = {
@@ -6,6 +6,8 @@ type Props = {
   onEdit: () => void
   onTogglePin: () => void
   onArchive: () => void
+  /** 钉为桌面贴纸 */
+  onSticker?: () => void
   /** 触发按钮的额外样式（卡片与列表里的尺寸不同） */
   triggerClassName?: string
   iconColor?: string
@@ -45,6 +47,7 @@ export function NoteMenu({
   onEdit,
   onTogglePin,
   onArchive,
+  onSticker,
   triggerClassName = '',
   iconColor,
   align = 'right',
@@ -91,6 +94,16 @@ export function NoteMenu({
                 onEdit()
               }}
             />
+            {onSticker && (
+              <MenuItem
+                icon={Sticker}
+                label="钉为贴纸"
+                onClick={() => {
+                  setOpen(false)
+                  onSticker()
+                }}
+              />
+            )}
             <MenuItem
               icon={Pin}
               label={pinned ? '取消置顶' : '置顶'}
