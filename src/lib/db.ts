@@ -20,6 +20,7 @@ type Row = {
   archived: number
   created_at: number
   updated_at: number
+  remind_at: number | null
 }
 
 let handle: Promise<Database> | null = null
@@ -85,6 +86,7 @@ function toNote(row: Row): Note {
     archived: row.archived === 1,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
+    remindAt: row.remind_at == null ? undefined : Number(row.remind_at),
   }
 }
 
@@ -97,8 +99,8 @@ export async function loadNotes(): Promise<Note[] | null> {
 }
 
 const UPSERT = `
-INSERT INTO notes (id, title, content, color, tags, pinned, archived, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO notes (id, title, content, color, tags, pinned, archived, created_at, updated_at, remind_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   title = excluded.title,
   content = excluded.content,
@@ -107,7 +109,8 @@ ON CONFLICT(id) DO UPDATE SET
   pinned = excluded.pinned,
   archived = excluded.archived,
   created_at = excluded.created_at,
-  updated_at = excluded.updated_at`
+  updated_at = excluded.updated_at,
+  remind_at = excluded.remind_at`
 
 /** 整体写回：先 upsert 全部，再删除已经不存在的行 */
 export async function saveNotes(notes: Note[]): Promise<void> {
@@ -125,6 +128,7 @@ export async function saveNotes(notes: Note[]): Promise<void> {
       n.archived ? 1 : 0,
       n.createdAt,
       n.updatedAt,
+      n.remindAt ?? null,
     ])
     // 同步 FTS5（INSERT OR REPLACE：有则替换无则插入）。
     // 只在 FTS5 可用时做，避免拖垮主保存流程。

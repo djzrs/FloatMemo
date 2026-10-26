@@ -10,6 +10,8 @@ export type NoteDraft = {
   content: string
   color: NoteColorKey
   tags?: string[]
+  /** 提醒时间（毫秒时间戳）。undefined=未提供；null=清除提醒 */
+  remindAt?: number | null
 }
 
 export const TAG_MAX_LENGTH = 12
@@ -76,6 +78,7 @@ export const useNotesStore = create<NotesState>()(
           tags: normalizeTags(draft.tags ?? []),
           createdAt: now,
           updatedAt: now,
+          remindAt: draft.remindAt ?? undefined,
         }
         set({ notes: [note, ...get().notes] })
         return note
@@ -94,6 +97,9 @@ export const useNotesStore = create<NotesState>()(
               content,
               title: rawTitle.trim() || deriveTitle(content),
               tags: draft.tags ? normalizeTags(draft.tags) : note.tags,
+              // undefined=未提供（保持原值）；number=设置；null=清除
+              remindAt:
+                draft.remindAt !== undefined ? draft.remindAt ?? undefined : note.remindAt,
               updatedAt: now,
             }
           }),

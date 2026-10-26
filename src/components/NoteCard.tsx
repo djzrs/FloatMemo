@@ -1,4 +1,4 @@
-import { Pin } from 'lucide-react'
+import { Bell, Pin } from 'lucide-react'
 import { NOTE_COLORS } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
@@ -79,13 +79,28 @@ export function NoteCard({ note, onOpen, onTogglePin, onArchive }: Props) {
             </span>
           ))}
         </div>
-        <time
-          className="shrink-0 text-[10.5px] whitespace-nowrap"
-          style={{ color: c.sub, opacity: 0.55 }}
-          title={formatDateTime(note.updatedAt)}
-        >
-          {formatRelative(note.updatedAt)}
-        </time>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {note.remindAt != null && (
+            <span
+              className="flex items-center gap-1 text-[10.5px] whitespace-nowrap"
+              title={formatDateTime(note.remindAt)}
+              style={{
+                color: note.remindAt <= Date.now() ? '#E5484D' : c.sub,
+                opacity: note.remindAt <= Date.now() ? 0.9 : 0.7,
+              }}
+            >
+              <Bell size={9.5} strokeWidth={2.2} />
+              {note.remindAt <= Date.now() ? '已到点' : formatRelative(note.remindAt)}
+            </span>
+          )}
+          <time
+            className="shrink-0 text-[10.5px] whitespace-nowrap"
+            style={{ color: c.sub, opacity: 0.55 }}
+            title={formatDateTime(note.updatedAt)}
+          >
+            {formatRelative(note.updatedAt)}
+          </time>
+        </div>
       </div>
     </article>
   )
