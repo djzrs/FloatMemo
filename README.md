@@ -23,6 +23,7 @@ Windows 桌面悬浮便签。Tauri 2 + Rust + React 19，前端 Vite 7 + Tailwin
 - **MySQL 备份**：设置页填连接信息后可直连 MySQL 服务器，把全部便签备份到指定表（自动建库建表，同步删除远端已删除的行）；支持 TLS（适配 TiDB Cloud 强制加密）
 - **托盘常驻**：托盘可唤起/隐藏/退出；全局快捷键 `Ctrl+Shift+N` / `Ctrl+Shift+M` 可自定义
 - **单实例**：防多开，第二个实例会唤醒已有窗口
+- **自动更新**：设置页「检查更新」，从 GitHub Releases 拉取新版本并静默安装
 
 ## 开发
 
@@ -53,6 +54,12 @@ npm run desktop:build
 
 - `src-tauri/target/release/floatmemo.exe` —— 免安装版，前端资源已嵌入
 - `src-tauri/target/release/bundle/nsis/FloatMemo_0.2.1_x64-setup.exe` —— 安装包
+- `latest.json` + `*.sig` —— 自动更新清单与签名（需配置签名密钥才会生成）
+
+> 自更新签名：首次打包前生成密钥 `npm run tauri signer generate -- -w ~/.tauri/floatmemo.key`，
+> 公钥写入 `src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey`；构建时设置环境变量
+> `TAURI_SIGNING_PRIVATE_KEY`（私钥路径或内容）与 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`（如有密码）。
+> 私钥请妥善保存，丢失后将无法再发布更新。
 
 ## 技术要点
 
