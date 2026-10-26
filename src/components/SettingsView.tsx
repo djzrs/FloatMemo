@@ -6,6 +6,8 @@ import {
   Info,
   Keyboard,
   Palette,
+  Plug,
+  Server,
   SlidersHorizontal,
   Upload,
   Zap,
@@ -14,7 +16,9 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { COLOR_ORDER, NOTE_COLORS } from '../data/colors'
 import { exportJson, exportMarkdown, parseBackup } from '../lib/backup'
-import { autoStartEnabled, isDesktop, setAutoStart } from '../lib/desktop'
+import { appVersion, autoStartEnabled, isDesktop, setAutoStart } from '../lib/desktop'
+import { mysqlBackup, mysqlBackupStatus, mysqlPing, type MysqlBackupStatus } from '../lib/mysql'
+import { formatDateTime } from '../lib/time'
 import { useNotesStore } from '../stores/notes'
 import { useSettingsStore, type CardDensity, type PanelView } from '../stores/settings'
 import { Ball } from './Ball'
@@ -135,20 +139,59 @@ function OutlineButton({
   icon: Icon,
   label,
   onClick,
+  disabled,
+  primary,
 }: {
   icon: LucideIcon
   label: string
   onClick: () => void
+  disabled?: boolean
+  primary?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex h-[28px] items-center gap-1.5 rounded-[7px] border border-ink-200/80 bg-white px-2.5 text-[11px] text-ink-600 transition-colors hover:bg-ink-50"
+      disabled={disabled}
+      className={`flex h-[28px] items-center gap-1.5 rounded-[7px] px-2.5 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+        primary
+          ? 'bg-brand-600 text-white shadow-sm hover:bg-brand-700'
+          : 'border border-ink-200/80 bg-white text-ink-600 hover:bg-ink-50'
+      }`}
     >
       <Icon size={11} strokeWidth={2} />
       {label}
     </button>
+  )
+}
+
+/** 设置项里的单行输入框 */
+function Field({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  placeholder,
+  className,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: 'text' | 'password' | 'number'
+  placeholder?: string
+  className?: string
+}) {
+  return (
+    <label className="flex items-center gap-2">
+      <span className="w-[52px] shrink-0 text-[11px] text-ink-500">{label}</span>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={`h-[26px] min-w-0 flex-1 rounded-[6px] border border-ink-200/80 bg-white px-2 text-[11.5px] text-ink-800 outline-none transition-colors placeholder:text-ink-300 focus:border-brand-400 ${className ?? ''}`}
+      />
+    </label>
   )
 }
 
@@ -160,10 +203,68 @@ export function SettingsView() {
   const importNotes = useNotesStore((s) => s.importNotes)
 
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [version, setVersion] = useState('0.2.0')
+  const [mysqlStatus, setMysqlStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [backingUp, setBackingUp] = useState(false)
+  const [lastBackup, setLastBackup] = useState<MysqlBackupStatus | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const statusTimer = useRef<number | undefined>(undefined)
 
+  const mysql = useSettingsStore((s) => s.mysql)
+  const patchSettings = useSettingsStore((s) => s.patch)
+
+  /** 备份前先确保本地 SQLite 里的数据是最新的 */
+  const patchMysqlConfig = (partial: Partial<typeof mysql>) =>
+    patchSettings({ mysql: { ...mysql, ...partial } })
+
+  const testMysql = async () => {
+    setTesting(true)
+    setMysqlStatus(null)
+    try {
+      const count = await mysqlPing(mysql)
+      setMysqlStatus({ ok: true, text: `连接成功，远端已有 ${count} 条便签` })
+    } catch (error) {
+      setMysqlStatus({
+        ok: false,
+        text: `连接失败：${error instanceof Error ? error.message : String(error)}`,
+      })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const runBackup = async () => {
+    setBackingUp(true)
+    setMysqlStatus(null)
+    try {
+      const result = await mysqlBackup(mysql, notes)
+      setLastBackup({
+        lastBackupAt: Date.now(),
+        lastBackupCount: result.written,
+        lastBackupHost: `${mysql.host}:${mysql.port}`,
+      })
+      setMysqlStatus({
+        ok: true,
+        text: `备份完成：写入 ${result.written} 条到 ${result.table}，远端共 ${result.total} 条`,
+      })
+    } catch (error) {
+      setMysqlStatus({
+        ok: false,
+        text: `备份失败：${error instanceof Error ? error.message : String(error)}`,
+      })
+    } finally {
+      setBackingUp(false)
+    }
+  }
+
   useEffect(() => () => window.clearTimeout(statusTimer.current), [])
+
+  // 桌面端：读打包元数据里的真实版本号
+  useEffect(() => {
+    void appVersion().then(setVersion)
+    void mysqlBackupStatus().then(setLastBackup)
+  }, [])
 
   // 桌面端：进入设置时对齐系统里真实的自启状态（用户可能在系统设置里改过）
   useEffect(() => {
@@ -522,6 +623,92 @@ export function SettingsView() {
                 <p className="px-1 text-[10.5px] leading-[17px] text-ink-300">
                   Markdown 导出为单个文件，按「二级标题 + 标签 + 正文」组织，方便贴到别处。
                 </p>
+
+                <Card icon={Server} title="MySQL 备份">
+                  <div className="flex flex-col gap-2 py-2.5">
+                    <Field
+                      label="主机"
+                      value={mysql.host}
+                      onChange={(v) => patchMysqlConfig({ host: v })}
+                      placeholder="127.0.0.1 或 db.example.com"
+                    />
+                    <Field
+                      label="端口"
+                      type="number"
+                      value={String(mysql.port)}
+                      onChange={(v) =>
+                        patchMysqlConfig({ port: Number(v) > 0 ? Number(v) : 3306 })
+                      }
+                    />
+                    <Field
+                      label="用户"
+                      value={mysql.user}
+                      onChange={(v) => patchMysqlConfig({ user: v })}
+                      placeholder="root"
+                    />
+                    <Field
+                      label="密码"
+                      type="password"
+                      value={mysql.password}
+                      onChange={(v) => patchMysqlConfig({ password: v })}
+                      placeholder="数据库密码"
+                    />
+                    <Field
+                      label="数据库"
+                      value={mysql.database}
+                      onChange={(v) => patchMysqlConfig({ database: v })}
+                      placeholder="floatmemo"
+                    />
+                    <Field
+                      label="表名"
+                      value={mysql.table}
+                      onChange={(v) => patchMysqlConfig({ table: v })}
+                      placeholder="floatmemo_notes"
+                    />
+                  </div>
+
+                  <Row title="连接测试" desc="确认能连上服务器并读到目标表">
+                    <OutlineButton
+                      icon={Plug}
+                      label={testing ? '测试中…' : '测试连接'}
+                      disabled={testing || backingUp}
+                      onClick={() => void testMysql()}
+                    />
+                  </Row>
+                  <Row title="立即备份" desc="把全部便签写入 MySQL，并同步删除远端多余的行">
+                    <OutlineButton
+                      icon={Database}
+                      primary
+                      label={backingUp ? '备份中…' : '备份到 MySQL'}
+                      disabled={backingUp || testing}
+                      onClick={() => void runBackup()}
+                    />
+                  </Row>
+                  {lastBackup && (
+                    <Row title="上次备份" desc={`${lastBackup.lastBackupHost ?? ''}`}>
+                      <span className="text-[11.5px] text-ink-600 tabular-nums">
+                        {lastBackup.lastBackupCount ?? 0} 条 ·{' '}
+                        {formatDateTime(lastBackup.lastBackupAt ?? Date.now())}
+                      </span>
+                    </Row>
+                  )}
+
+                  {mysqlStatus && (
+                    <div
+                      className={`py-2 text-[10.5px] ${
+                        mysqlStatus.ok ? 'text-brand-700' : 'text-rose-600'
+                      }`}
+                    >
+                      {mysqlStatus.text}
+                    </div>
+                  )}
+
+                  <p className="px-1 pb-2 text-[10.5px] leading-[17px] text-ink-300">
+                    连接信息只保存在本机设置里。备份会在目标库中建表
+                    <span className="font-mono text-ink-400"> {mysql.table || 'floatmemo_notes'} </span>
+                    （不存在时自动创建），字段与本地 SQLite 一致。
+                  </p>
+                </Card>
               </>
             )}
 
@@ -540,7 +727,7 @@ export function SettingsView() {
                         FLOATMEMO
                       </span>
                     </div>
-                    <p className="mt-0.5 text-[10.5px] text-ink-400">v0.1.0 · 本地预览版</p>
+                    <p className="mt-0.5 text-[10.5px] text-ink-400">v{version} · 支持 MySQL 备份</p>
                   </div>
                 </div>
                 <div className="px-5 py-3.5">

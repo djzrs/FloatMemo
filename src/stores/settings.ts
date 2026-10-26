@@ -5,6 +5,16 @@ import type { NoteColorKey } from '../data/colors'
 export type CardDensity = 'compact' | 'cozy' | 'relaxed'
 export type PanelView = 'grid' | 'list'
 
+/** MySQL 备份连接配置 */
+export type MysqlConfig = {
+  host: string
+  port: number
+  user: string
+  password: string
+  database: string
+  table: string
+}
+
 export type Settings = {
   /** 新建便签的默认颜色（也会记住上次使用的颜色） */
   defaultColor: NoteColorKey
@@ -22,6 +32,8 @@ export type Settings = {
   /** 以下两项需要 Tauri 层才能真正生效，先存下来 */
   autoStart: boolean
   minimizeToTray: boolean
+  /** MySQL 备份配置（密码只保存在本机） */
+  mysql: MysqlConfig
 }
 
 type SettingsState = Settings & {
@@ -38,6 +50,14 @@ const DEFAULTS: Settings = {
   defaultView: 'grid',
   autoStart: true,
   minimizeToTray: true,
+  mysql: {
+    host: '127.0.0.1',
+    port: 3306,
+    user: 'root',
+    password: '',
+    database: 'floatmemo',
+    table: 'floatmemo_notes',
+  },
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -60,6 +80,7 @@ export const useSettingsStore = create<SettingsState>()(
         defaultView: state.defaultView,
         autoStart: state.autoStart,
         minimizeToTray: state.minimizeToTray,
+        mysql: state.mysql,
       }),
     },
   ),

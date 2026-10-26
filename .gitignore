@@ -20,3 +20,6 @@ Thumbs.db
 # 日志
 *.log
 npm-debug.log*
+
+# 本地测试用 MySQL/MariaDB
+/tools/

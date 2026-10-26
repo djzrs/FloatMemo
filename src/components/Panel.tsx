@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
 import { formatDateTime, formatRelative } from '../lib/time'
-import { hideWindow } from '../lib/desktop'
+import { appVersion, hideWindow } from '../lib/desktop'
 import { useNotesStore } from '../stores/notes'
 import { DENSITY_STYLES, useSettingsStore } from '../stores/settings'
 import { Logomark } from './Logomark'
@@ -166,6 +166,7 @@ export function Panel({
   const archiveNote = useNotesStore((s) => s.archiveNote)
 
   const [nav, setNav] = useState<PanelPage>(page)
+  const [version, setVersion] = useState('0.2.0')
   const [query, setQuery] = useState('')
   const [colorFilter, setColorFilter] = useState<NoteColorKey | null>(null)
   const [tagFilter, setTagFilter] = useState<string | null>(null)
@@ -173,6 +174,10 @@ export function Panel({
   const [sortOpen, setSortOpen] = useState(false)
   const [editing, setEditing] = useState<{ note: Note | null } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => {
+    void appVersion().then(setVersion)
+  }, [])
 
   const view = useSettingsStore((s) => s.defaultView)
   const density = useSettingsStore((s) => s.cardDensity)
@@ -349,7 +354,7 @@ export function Panel({
             设置
           </button>
           <div className="mt-2.5 flex items-center justify-between px-2.5 text-[9px] text-white/25">
-            <span>v0.1.0 · 界面预览</span>
+            <span>v{version}</span>
             <span className="flex items-center gap-1">
               <span className="h-[5px] w-[5px] rounded-full bg-brand-400/80" />
               本地

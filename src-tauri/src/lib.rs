@@ -1,5 +1,8 @@
 use std::sync::Mutex;
 
+pub mod mysql;
+pub use mysql as mysql_backend;
+
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -458,11 +461,45 @@ fn set_autostart(app: AppHandle, enable: bool) -> Result<(), String> {
         manager.disable().map_err(|e| e.to_string())
     }
 }
-
 /// 读取系统里真实的自启状态（用户可能在系统设置里改过）
 #[tauri::command]
 fn autostart_enabled(app: AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+// ── MySQL 备份 ────────────────────────────────────────────────
+
+/// 最近一次备份的状态（进程内保存）
+static LAST_BACKUP: Mutex<Option<mysql::BackupStatus>> = Mutex::new(None);
+
+/// 测试 MySQL 连接：能连上返回目标表里已有的便签条数
+#[tauri::command]
+fn mysql_ping(config: mysql::MysqlConfig) -> Result<usize, String> {
+    mysql::ping(&config)
+}
+
+/// 把全部便签备份进 MySQL
+#[tauri::command]
+fn mysql_backup(
+    config: mysql::MysqlConfig,
+    notes: Vec<mysql::NoteRow>,
+) -> Result<mysql::BackupResult, String> {
+    let result = mysql::backup(&config, &notes)?;
+    let status = mysql::BackupStatus {
+        last_backup_at: Some(mysql::now_ms()),
+        last_backup_count: Some(result.written),
+        last_backup_host: Some(format!("{}:{}", config.host, config.port)),
+    };
+    if let Ok(mut g) = LAST_BACKUP.lock() {
+        *g = Some(status);
+    }
+    Ok(result)
+}
+
+/// 读取最近一次备份状态
+#[tauri::command]
+fn mysql_backup_status() -> Option<mysql::BackupStatus> {
+    LAST_BACKUP.lock().ok().and_then(|g| g.clone())
 }
 
 #[tauri::command]
@@ -525,6 +562,9 @@ pub fn run() {
             hide_window,
             set_autostart,
             autostart_enabled,
+            mysql_ping,
+            mysql_backup,
+            mysql_backup_status,
             quit_app
         ])
         .setup(|app| {

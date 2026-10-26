@@ -82,6 +82,19 @@ export async function hideWindow(): Promise<void> {
   await invoke('hide_window')
 }
 
+/** 应用版本号：桌面端读打包元数据，浏览器预览退回构建时常量 */
+export async function appVersion(): Promise<string> {
+  if (!isDesktop) return FALLBACK_VERSION
+  try {
+    const { getVersion } = await import('@tauri-apps/api/app')
+    return await getVersion()
+  } catch {
+    return FALLBACK_VERSION
+  }
+}
+
+const FALLBACK_VERSION = '0.2.0'
+
 export async function quitApp(): Promise<void> {
   if (!isDesktop) return
   await invoke('quit_app')
