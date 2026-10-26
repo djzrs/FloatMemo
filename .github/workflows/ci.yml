@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  frontend:
+    name: 前端（类型检查 + 测试 + 构建）
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 单元测试
+        run: npm test
+
+      - name: 构建
+        run: npm run build
+
+  rust:
+    name: Rust（格式化 + 静态检查 + 测试）
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: rootpw
+          MYSQL_DATABASE: floatmemo_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -prootpw"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 等待 MySQL 就绪
+        run: |
+          for i in $(seq 1 30); do
+            if (echo > /dev/tcp/127.0.0.1/3306) 2>/dev/null; then
+              echo "MySQL 已就绪"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MySQL 未就绪" >&2
+          exit 1
+
+      - name: 格式检查
+        run: cargo fmt --check
+        working-directory: src-tauri
+
+      - name: Clippy 静态检查
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+
+      - name: 单元测试与集成测试
+        run: cargo test
+        working-directory: src-tauri
+        env:
+          FLOATMEMO_TEST_MYSQL: 127.0.0.1:3306
+          FLOATMEMO_TEST_MYSQL_USER: root
+          FLOATMEMO_TEST_MYSQL_PASSWORD: rootpw
+          FLOATMEMO_TEST_MYSQL_DB: floatmemo_test

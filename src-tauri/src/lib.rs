@@ -9,8 +9,8 @@ use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
 };
 use tauri_plugin_autostart::ManagerExt;
-use tauri_plugin_sql::{Migration, MigrationKind};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
+use tauri_plugin_sql::{Migration, MigrationKind};
 
 const BALL: &str = "ball";
 
@@ -54,8 +54,7 @@ CREATE TABLE IF NOT EXISTS notes (
 const SQL_INDEX_NOTES: &str =
     "CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes (updated_at DESC);";
 
-const SQL_ADD_REMIND_AT: &str =
-    "ALTER TABLE notes ADD COLUMN remind_at INTEGER;";
+const SQL_ADD_REMIND_AT: &str = "ALTER TABLE notes ADD COLUMN remind_at INTEGER;";
 
 /// 悬浮球停靠的边
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -170,7 +169,12 @@ fn along_value(v: Option<i32>, min: i32, max: i32) -> i32 {
 
 /// 球窗贴在某条边上的窗口坐标（hidden = 半隐藏，只露出 6px）
 /// 球体在窗口内占 10..64（逻辑），所以贴右时窗口左边 = 右边缘 - 76。
-fn slot(window: &WebviewWindow, e: Edge, hidden: bool, along: Option<i32>) -> Option<PhysicalPosition<i32>> {
+fn slot(
+    window: &WebviewWindow,
+    e: Edge,
+    hidden: bool,
+    along: Option<i32>,
+) -> Option<PhysicalPosition<i32>> {
     let r = screen_rect(window)?;
     let s = scale_of(window);
     let px = |v: f64| (v * s).round() as i32;
@@ -369,7 +373,7 @@ fn set_ball_hidden(app: AppHandle, hidden: bool) -> Result<bool, String> {
         .get_webview_window(BALL)
         .ok_or_else(|| "球窗不存在".to_string())?;
     if !docked() {
-        return Ok(false)
+        return Ok(false);
     }
     place_ball(&ball, hidden);
     Ok(true)
@@ -393,10 +397,16 @@ fn expand_to(app: &AppHandle, w: f64, h: f64) -> Result<(), String> {
     let size = tauri::LogicalSize::new(w, h).to_physical::<i32>(s);
     let span = (BALL_WIN * s).round() as i32;
     let (x, y) = match e {
-        Edge::Right => (base.x + span - size.width, base.y - (size.height - span) / 2),
+        Edge::Right => (
+            base.x + span - size.width,
+            base.y - (size.height - span) / 2,
+        ),
         Edge::Left => (base.x, base.y - (size.height - span) / 2),
         Edge::Top => (base.x - (size.width - span) / 2, base.y),
-        Edge::Bottom => (base.x - (size.width - span) / 2, base.y + span - size.height),
+        Edge::Bottom => (
+            base.x - (size.width - span) / 2,
+            base.y + span - size.height,
+        ),
     };
     // 别让展开后的窗口跑出屏幕
     let (x, y) = if let Some(r) = screen_rect(&ball) {
@@ -524,7 +534,7 @@ fn register_shortcuts(
         let page = *with_page;
         let result = gs.on_shortcut(*combo, move |app, _s, e| {
             if e.state() != ShortcutState::Pressed {
-                return
+                return;
             }
             if page {
                 let _ = app.emit(&ev, "notes");
@@ -726,7 +736,7 @@ pub fn run() {
                 .expect("注册全局快捷键失败")
                 .with_handler(|app, shortcut, event| {
                     if event.state() != ShortcutState::Pressed {
-                        return
+                        return;
                     }
                     if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyN) {
                         let _ = expand_quick(app.clone());
