@@ -11,6 +11,8 @@ export type Note = {
   tags: string[]
   createdAt: number
   updatedAt: number
+  /** 提醒时间（毫秒时间戳）；未设置提醒时为 undefined */
+  remindAt?: number
 }
 
 const MINUTE = 60_000

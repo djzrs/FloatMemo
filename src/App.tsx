@@ -4,6 +4,7 @@ import { BallWindow } from './components/BallWindow'
 import { Panel, type PanelPage } from './components/Panel'
 import { QuickNote } from './components/QuickNote'
 import { hideWindow, isDesktop } from './lib/desktop'
+import { startReminderWatcher } from './lib/reminders'
 import { DesktopDemo } from './showcase/DesktopDemo'
 import { Showcase } from './showcase/Showcase'
 import { flushNotes, initNotes, useNotesStore } from './stores/notes'
@@ -35,8 +36,9 @@ export default function App() {
     document.body.style.overflow = 'hidden'
   }, [])
 
-  // 桌面端：从 SQLite 载入便签，并在离开前把改动刷进库
+  // 桌面端：从 SQLite 载入便签，并在离开前把改动刷进库；同时启动到点提醒调度
   useEffect(() => {
+    if (isDesktop) startReminderWatcher()
     void initNotes()
     const leave = () => void flushNotes()
     window.addEventListener('beforeunload', leave)

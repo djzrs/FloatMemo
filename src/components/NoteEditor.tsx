@@ -1,4 +1,4 @@
-import { Columns2, Eye, Pencil, Trash2, X } from 'lucide-react'
+import { Bell, BellOff, Columns2, Eye, Pencil, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
@@ -21,6 +21,20 @@ const VIEW_MODES: { key: ViewMode; label: string; icon: typeof Pencil; tip: stri
   { key: 'preview', label: '预览', icon: Eye, tip: '纯预览渲染结果' },
 ]
 
+/** 毫秒时间戳 → datetime-local 输入框值（本地时区，YYYY-MM-DDTHH:mm） */
+function toLocalInput(ms: number): string {
+  const d = new Date(ms)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** datetime-local 输入框值 → 毫秒时间戳；空串返回 null */
+function fromLocalInput(value: string): number | null {
+  if (!value) return null
+  const ms = new Date(value).getTime()
+  return Number.isNaN(ms) ? null : ms
+}
+
 /** 新建 / 编辑便签的浮层 */
 export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onArchive }: Props) {
   const isEdit = Boolean(note)
@@ -31,6 +45,8 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
   const [tagInput, setTagInput] = useState('')
   // 默认分栏：写的时候能实时看到渲染效果
   const [viewMode, setViewMode] = useState<ViewMode>('split')
+  // 提醒时间（毫秒时间戳）；null=不提醒
+  const [remindAt, setRemindAt] = useState<number | null>(note?.remindAt ?? null)
 
   const titleRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
@@ -67,7 +83,13 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
 
   const save = () => {
     if (!canSave) return
-    onSave({ title, content, color, tags: normalizeTags([...tags, tagInput]) })
+    onSave({
+      title,
+      content,
+      color,
+      tags: normalizeTags([...tags, tagInput]),
+      remindAt: remindAt ?? null,
+    })
   }
 
   return (
@@ -174,7 +196,33 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
             )}
           </div>
 
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {/* 提醒设置 */}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="flex items-center gap-1 text-[10.5px] text-ink-400">
+              {remindAt ? <Bell size={11} strokeWidth={2} className="text-brand-600" /> : <BellOff size={11} strokeWidth={2} className="text-ink-300" />}
+              提醒
+            </span>
+            <input
+              type="datetime-local"
+              value={remindAt ? toLocalInput(remindAt) : ''}
+              min={toLocalInput(Date.now())}
+              onChange={(e) => setRemindAt(fromLocalInput(e.target.value))}
+              className="h-[24px] rounded-[6px] border border-ink-200/80 bg-white px-2 text-[11px] text-ink-600 outline-none transition-colors focus:border-brand-300 focus:ring-2 focus:ring-brand-100"
+            />
+            {remindAt && (
+              <button
+                type="button"
+                onClick={() => setRemindAt(null)}
+                className="flex items-center gap-1 rounded-[6px] px-1.5 py-[3px] text-[10.5px] text-ink-400 transition-colors hover:bg-ink-50 hover:text-rose-500"
+              >
+                <X size={10} strokeWidth={2.4} />
+                清除
+              </button>
+            )}
+            <span className="ml-auto text-[9.5px] text-ink-300">到点弹出系统通知</span>
+          </div>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {tags.map((tag) => (
               <span
                 key={tag}

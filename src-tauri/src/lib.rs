@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS notes (
 const SQL_INDEX_NOTES: &str =
     "CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes (updated_at DESC);";
 
+const SQL_ADD_REMIND_AT: &str =
+    "ALTER TABLE notes ADD COLUMN remind_at INTEGER;";
+
 /// 悬浮球停靠的边
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Edge {
@@ -594,14 +597,20 @@ pub fn run() {
                             sql: SQL_CREATE_NOTES,
                             kind: MigrationKind::Up,
                         },
-Migration {
-                        version: 2,
-                        description: "便签更新时间索引",
-                        sql: SQL_INDEX_NOTES,
-                        kind: MigrationKind::Up,
-                    },
-                    // FTS5 迁移暂时移除——tauri-plugin-sql 的 SQLite 可能不支持 FTS5，
-                    // 导致应用启动卡住。改用 db.ts 里惰性创建。
+                        Migration {
+                            version: 2,
+                            description: "便签更新时间索引",
+                            sql: SQL_INDEX_NOTES,
+                            kind: MigrationKind::Up,
+                        },
+                        Migration {
+                            version: 3,
+                            description: "便签提醒时间",
+                            sql: SQL_ADD_REMIND_AT,
+                            kind: MigrationKind::Up,
+                        },
+                        // FTS5 迁移暂时移除——tauri-plugin-sql 的 SQLite 可能不支持 FTS5，
+                        // 导致应用启动卡住。改用 db.ts 里惰性创建。
                     ],
                 )
                 .build(),
@@ -610,6 +619,8 @@ Migration {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None::<Vec<&str>>,
         ))
+        // 到点提醒：系统通知
+        .plugin(tauri_plugin_notification::init())
         // 防多开：第二个实例启动时，唤醒并聚焦第一个窗口，而不是再开一个
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(ball) = app.get_webview_window(BALL) {
