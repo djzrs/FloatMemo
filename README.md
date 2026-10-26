@@ -12,6 +12,7 @@ Windows 桌面悬浮便签。Tauri 2 + Rust + React 19，前端 Vite 7 + Tailwin
 - **便签面板**：`Ctrl+Shift+M` 或托盘打开；增删改、置顶、归档、回收站、搜索筛选排序、网格/列表视图
 - **设置中心**：默认颜色、卡片密度、动画、球透明度、半隐藏、自动吸附边缘、开机自启、JSON + Markdown 导入导出
 - **数据落盘**：SQLite（`tauri-plugin-sql`），改动 500ms 防抖写入，退出前强制刷盘
+- **MySQL 备份**：设置页填连接信息后可直连 MySQL 服务器，把全部便签备份到指定表（自动建库建表，同步删除远端已删除的行）
 - **托盘常驻**：托盘可唤起/隐藏/退出；全局快捷键 `Ctrl+Shift+N` / `Ctrl+Shift+M`
 
 ## 开发
@@ -44,7 +45,7 @@ npm run desktop:build
 ```
 src/            React 前端
   components/   BallWindow（形态切换）、Ball、QuickNote、Panel、SettingsView
-  lib/          desktop.ts（Tauri 命令封装）、db.ts（SQLite 读写）
+  lib/          desktop.ts（Tauri 命令封装）、db.ts（SQLite 读写）、mysql.ts（MySQL 备份）
   stores/       notes.ts（便签）、settings.ts（设置）
-src-tauri/      Rust 窗口管理、托盘、快捷键、圆形裁剪、SQL 迁移
+src-tauri/      Rust 窗口管理、托盘、快捷键、圆形裁剪、SQL 迁移、MySQL 备份
 ```
