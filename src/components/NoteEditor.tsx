@@ -1,8 +1,9 @@
-import { Trash2, X } from 'lucide-react'
+import { Columns2, Eye, Pencil, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { COLOR_ORDER, NOTE_COLORS, type NoteColorKey } from '../data/colors'
 import type { Note } from '../data/notes'
 import { normalizeTags, TAG_MAX_COUNT, type NoteDraft } from '../stores/notes'
+import { MarkdownPreview } from './MarkdownPreview'
 
 type Props = {
   note?: Note | null
@@ -12,6 +13,14 @@ type Props = {
   onArchive?: () => void
 }
 
+type ViewMode = 'edit' | 'split' | 'preview'
+
+const VIEW_MODES: { key: ViewMode; label: string; icon: typeof Pencil; tip: string }[] = [
+  { key: 'edit', label: '编辑', icon: Pencil, tip: '纯编辑（Ctrl+Shift+P 切换）' },
+  { key: 'split', label: '分栏', icon: Columns2, tip: '左编辑右预览' },
+  { key: 'preview', label: '预览', icon: Eye, tip: '纯预览渲染结果' },
+]
+
 /** 新建 / 编辑便签的浮层 */
 export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onArchive }: Props) {
   const isEdit = Boolean(note)
@@ -20,6 +29,8 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
   const [color, setColor] = useState<NoteColorKey>(note?.color ?? defaultColor)
   const [tags, setTags] = useState<string[]>(note?.tags ?? [])
   const [tagInput, setTagInput] = useState('')
+  // 默认分栏：写的时候能实时看到渲染效果
+  const [viewMode, setViewMode] = useState<ViewMode>('split')
 
   const titleRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
@@ -32,6 +43,18 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
       contentRef.current.setSelectionRange(end, end)
     }
   }, [isEdit])
+
+  // Ctrl+Shift+P 在 编辑 / 分栏 / 预览 之间轮换
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        setViewMode((m) => (m === 'edit' ? 'split' : m === 'split' ? 'preview' : 'edit'))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const canSave = Boolean(title.trim() || content.trim())
   const tone = NOTE_COLORS[color]
@@ -97,14 +120,59 @@ export function NoteEditor({ note, defaultColor = 'yellow', onClose, onSave, onA
             placeholder="标题"
             className="mt-1 w-full bg-transparent text-[17px] font-semibold tracking-[-0.01em] text-ink-900 outline-none placeholder:text-ink-200"
           />
-          <textarea
-            ref={contentRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="写点什么…"
-            spellCheck={false}
-            className="mt-2 h-[196px] w-full resize-none bg-transparent text-[13px] leading-[24px] text-ink-700 outline-none placeholder:text-ink-300"
-          />
+          {/* 视图模式切换 */}
+          <div className="mt-2 flex items-center gap-1">
+            <div className="flex items-center gap-0.5 rounded-[8px] bg-ink-100/70 p-0.5">
+              {VIEW_MODES.map(({ key, label, icon: Icon, tip }) => {
+                const active = key === viewMode
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    title={tip}
+                    onClick={() => setViewMode(key)}
+                    className={`flex h-[22px] items-center gap-1 rounded-[6px] px-2 text-[10.5px] font-medium transition-colors ${
+                      active
+                        ? 'bg-white text-ink-700 shadow-[0_1px_2px_rgba(15,45,45,0.1)]'
+                        : 'text-ink-400 hover:text-ink-600'
+                    }`}
+                  >
+                    <Icon size={10.5} strokeWidth={2.2} />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            <span className="ml-1 text-[9.5px] text-ink-300">Markdown 实时预览</span>
+          </div>
+
+          {/* 编辑 / 预览 内容区 */}
+          <div
+            className={`mt-2 grid h-[196px] gap-0 ${
+              viewMode === 'split' ? 'grid-cols-2 divide-x divide-ink-100' : 'grid-cols-1'
+            }`}
+          >
+            {(viewMode === 'edit' || viewMode === 'split') && (
+              <textarea
+                ref={contentRef}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="写点什么… 支持 Markdown：**加粗**、`代码`、- 列表、# 标题"
+                spellCheck={false}
+                className={`h-full w-full resize-none bg-transparent text-[13px] leading-[24px] text-ink-700 outline-none placeholder:text-ink-300 ${
+                  viewMode === 'edit' ? '' : 'pr-3'
+                }`}
+              />
+            )}
+            {(viewMode === 'preview' || viewMode === 'split') && (
+              <div className={viewMode === 'split' ? 'h-full min-w-0 pl-3' : 'h-full'}>
+                <MarkdownPreview
+                  content={content}
+                  className={viewMode === 'split' ? 'px-0 py-0' : 'px-1 py-1'}
+                />
+              </div>
+            )}
+          </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {tags.map((tag) => (

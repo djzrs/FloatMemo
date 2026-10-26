@@ -10,4 +10,14 @@ export default defineConfig({
     host: '127.0.0.1',
   },
   clearScreen: false,
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Markdown 渲染链独立成块，避免撑大主包（桌面端本地加载，体积不敏感）
+          markdown: ['react-markdown', 'remark-gfm'],
+        },
+      },
+    },
+  },
 })
