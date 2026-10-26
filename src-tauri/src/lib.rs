@@ -10,7 +10,7 @@ use tauri::{
 };
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_sql::{Migration, MigrationKind};
-use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
 
 const BALL: &str = "ball";
 
@@ -329,6 +329,30 @@ fn snap_ball(app: AppHandle, enabled: bool) -> Result<(), String> {
         set_free_pos(Some(pos));
         let _ = ball.set_position(pos);
     }
+    // 通知前端记住当前位置（自由态存下来，重启后还原）
+    let pos = free_pos().map(|p| (p.x, p.y));
+    let _ = app.emit("floatmemo://ball-pos", (docked(), pos));
+    Ok(())
+}
+
+/// 启动时按设置还原球的位置与吸附状态（Rust 静态默认是贴边，需要前端把上次的值灌进来）
+#[tauri::command]
+fn restore_ball_position(
+    app: AppHandle,
+    x: Option<i32>,
+    y: Option<i32>,
+    dock: bool,
+) -> Result<(), String> {
+    let ball = app
+        .get_webview_window(BALL)
+        .ok_or_else(|| "球窗不存在".to_string())?;
+    set_docked(dock);
+    set_free_pos(x.zip(y).map(|(x, y)| PhysicalPosition::new(x, y)));
+    if let Some(pos) = free_pos() {
+        let _ = ball.set_position(pos);
+    } else if docked() {
+        place_ball(&ball, false);
+    }
     Ok(())
 }
 
@@ -467,6 +491,55 @@ fn autostart_enabled(app: AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
 }
 
+// ── 全局快捷键（可自定义）───────────────────────────────────────────
+
+/// 重新注册全部全局快捷键。第二个实例不会走到这里（被单实例插件拦截）。
+/// 失败时已自动 unregister_all 回滚，前端应仅在成功时才把新值写进设置。
+#[tauri::command]
+fn register_shortcuts(
+    app: AppHandle,
+    quick: String,
+    panel: String,
+    search: String,
+) -> Result<(), String> {
+    let gs = app.global_shortcut();
+    gs.unregister_all().map_err(|e| e.to_string())?;
+
+    // (label, combo, event, 面板是否带 page 载荷)
+    let bindings: &[(&str, &str, &str, bool)] = &[
+        ("唤起速记", &quick, "floatmemo://quick", false),
+        ("打开面板", &panel, "floatmemo://panel", true),
+        ("面板搜索", &search, "floatmemo://search", false),
+    ];
+
+    let mut errors: Vec<String> = Vec::new();
+    for (label, combo, event, with_page) in bindings {
+        let ev = event.to_string();
+        let page = *with_page;
+        let result = gs.on_shortcut(*combo, move |app, _s, e| {
+            if e.state() != ShortcutState::Pressed {
+                return
+            }
+            if page {
+                let _ = app.emit(&ev, "notes");
+            } else {
+                let _ = app.emit(&ev, ());
+            }
+        });
+        if let Err(err) = result {
+            errors.push(format!("{}（{}）注册失败：{}", label, combo, err));
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        // 回滚：别留下"只注册了一半"的状态
+        let _ = gs.unregister_all();
+        Err(errors.join("；"))
+    }
+}
+
 // ── MySQL 备份 ────────────────────────────────────────────────
 
 /// 最近一次备份的状态（进程内保存）
@@ -521,12 +594,14 @@ pub fn run() {
                             sql: SQL_CREATE_NOTES,
                             kind: MigrationKind::Up,
                         },
-                        Migration {
-                            version: 2,
-                            description: "便签更新时间索引",
-                            sql: SQL_INDEX_NOTES,
-                            kind: MigrationKind::Up,
-                        },
+Migration {
+                        version: 2,
+                        description: "便签更新时间索引",
+                        sql: SQL_INDEX_NOTES,
+                        kind: MigrationKind::Up,
+                    },
+                    // FTS5 迁移暂时移除——tauri-plugin-sql 的 SQLite 可能不支持 FTS5，
+                    // 导致应用启动卡住。改用 db.ts 里惰性创建。
                     ],
                 )
                 .build(),
@@ -535,6 +610,13 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None::<Vec<&str>>,
         ))
+        // 防多开：第二个实例启动时，唤醒并聚焦第一个窗口，而不是再开一个
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(ball) = app.get_webview_window(BALL) {
+                let _ = ball.show();
+                let _ = ball.set_focus();
+            }
+        }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_shortcuts(["Ctrl+Shift+N", "Ctrl+Shift+M"])
@@ -565,7 +647,9 @@ pub fn run() {
             mysql_ping,
             mysql_backup,
             mysql_backup_status,
-            quit_app
+            quit_app,
+            register_shortcuts,
+            restore_ball_position
         ])
         .setup(|app| {
             if let Some(ball) = app.get_webview_window(BALL) {

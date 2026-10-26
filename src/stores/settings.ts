@@ -38,6 +38,14 @@ export type Settings = {
   minimizeToTray: boolean
   /** MySQL 备份配置（密码只保存在本机） */
   mysql: MysqlConfig
+  /** 全局快捷键（需在桌面端重新注册才生效） */
+  shortcuts: {
+    quick: string
+    panel: string
+    search: string
+  }
+  /** 未吸附时的自由位置（物理像素）；为 null 表示停在默认的贴边位 */
+  ballPosition: { x: number; y: number } | null
 }
 
 type SettingsState = Settings & {
@@ -64,6 +72,12 @@ const DEFAULTS: Settings = {
     sslMode: 'none',
     caPath: '',
   },
+  shortcuts: {
+    quick: 'Ctrl+Shift+N',
+    panel: 'Ctrl+Shift+M',
+    search: 'Ctrl+K',
+  },
+  ballPosition: null,
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -87,6 +101,8 @@ export const useSettingsStore = create<SettingsState>()(
         autoStart: state.autoStart,
         minimizeToTray: state.minimizeToTray,
         mysql: state.mysql,
+        shortcuts: state.shortcuts,
+        ballPosition: state.ballPosition,
       }),
       // 老版本存的 mysql 配置没有 sslMode / caPath，合并时补上默认值，
       // 否则升级后设置页会读到 undefined
@@ -96,6 +112,8 @@ export const useSettingsStore = create<SettingsState>()(
           ...current,
           ...saved,
           mysql: { ...DEFAULTS.mysql, ...(saved?.mysql ?? {}) },
+          shortcuts: { ...DEFAULTS.shortcuts, ...(saved?.shortcuts ?? {}) },
+          ballPosition: saved?.ballPosition ?? null,
         }
       },
     },
