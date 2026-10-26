@@ -199,16 +199,21 @@ pub fn explain_error(err: &str) -> String {
             .to_string();
     }
     if lower.contains("access denied") {
-        return "认证失败：用户名或密码不对。云数据库的用户名通常要带集群前缀（如 xxx.root）。".to_string();
+        return "认证失败：用户名或密码不对。云数据库的用户名通常要带集群前缀（如 xxx.root）。"
+            .to_string();
     }
     if lower.contains("unknown database") {
         return "数据库不存在。请确认「数据库」名称，或换一个已有权限的库。".to_string();
     }
-    if lower.contains("connection refused") || lower.contains("timed out") || lower.contains("os error 10061") {
+    if lower.contains("connection refused")
+        || lower.contains("timed out")
+        || lower.contains("os error 10061")
+    {
         return "连不上服务器：请检查主机地址、端口，以及防火墙/安全组是否放行。".to_string();
     }
     if lower.contains("certificate") || lower.contains("rustls") || lower.contains("handshake") {
-        return "TLS 握手失败：证书无法校验。可改用「TLS（不校验）」，或指定正确的 CA 证书文件。".to_string();
+        return "TLS 握手失败：证书无法校验。可改用「TLS（不校验）」，或指定正确的 CA 证书文件。"
+            .to_string();
     }
     err.to_string()
 }

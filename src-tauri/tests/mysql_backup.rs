@@ -16,7 +16,9 @@ const TABLE: &str = "floatmemo_notes_test";
 fn config() -> MysqlConfig {
     let host_port =
         std::env::var("FLOATMEMO_TEST_MYSQL").unwrap_or_else(|_| "127.0.0.1:3306".into());
-    let (host, port) = host_port.rsplit_once(':').unwrap_or((host_port.as_str(), "3306"));
+    let (host, port) = host_port
+        .rsplit_once(':')
+        .unwrap_or((host_port.as_str(), "3306"));
     MysqlConfig {
         host: host.to_string(),
         port: port.parse().unwrap_or(3306),
@@ -105,7 +107,10 @@ fn backup_creates_table_and_syncs_rows() {
 
     // 中文内容不乱码
     let content: Option<String> = conn
-        .exec_first(format!("SELECT content FROM `{}` WHERE id = 'a'", TABLE), ())
+        .exec_first(
+            format!("SELECT content FROM `{}` WHERE id = 'a'", TABLE),
+            (),
+        )
         .unwrap();
     assert!(content.unwrap().contains("内容 of"));
 
@@ -229,10 +234,7 @@ fn tidb_cloud_requires_tls() {
         .unwrap();
     assert_eq!(title.as_deref(), Some("来自 TiDB 的便签"));
     let tags: Option<String> = conn
-        .exec_first(
-            "SELECT tags FROM `floatmemo_notes` WHERE id = 'tidb-1'",
-            (),
-        )
+        .exec_first("SELECT tags FROM `floatmemo_notes` WHERE id = 'tidb-1'", ())
         .unwrap();
     assert!(tags.unwrap().contains("测试"));
     println!("TiDB 回读校验通过");
