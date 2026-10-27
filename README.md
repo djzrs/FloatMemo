@@ -1,6 +1,6 @@
 # FloatMemo · 浮笺
 
-> **中文** · [English](./README.en.md)
+> **中文** · [English](./README.en.md) · [开发路线图](./docs/ROADMAP.md)
 
 Windows 桌面悬浮便签。Tauri 2 + Rust + React 19，前端 Vite 7 + Tailwind CSS 4，数据存 SQLite。
 

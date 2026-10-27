@@ -1,6 +1,6 @@
 # FloatMemo
 
-> [中文](./README.md) · **English**
+> [中文](./README.md) · **English** · [Roadmap](./docs/ROADMAP.md)
 
 A Windows desktop sticky-note app. Tauri 2 + Rust + React 19, built with Vite 7 + Tailwind CSS 4, data stored in SQLite.
 
